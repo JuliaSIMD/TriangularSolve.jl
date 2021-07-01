@@ -1,0 +1,13 @@
+name = "TriangularSolve"
+uuid = "d5829a12-d9aa-46ab-831f-fb7c9ab06edf"
+authors = ["chriselrod <elrodc@gmail.com> and contributors"]
+version = "0.1.0"
+
+[compat]
+julia = "1"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
