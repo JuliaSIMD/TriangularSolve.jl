@@ -3,6 +3,11 @@ uuid = "d5829a12-d9aa-46ab-831f-fb7c9ab06edf"
 authors = ["chriselrod <elrodc@gmail.com> and contributors"]
 version = "0.1.0"
 
+[deps]
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+LoopVectorization = "bdcacae8-1622-11e9-2a5c-532679323890"
+VectorizationBase = "3d5dd08c-fd9d-11e8-17fa-ed2836048c2f"
+
 [compat]
 julia = "1"
 
