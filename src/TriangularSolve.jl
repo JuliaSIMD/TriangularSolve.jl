@@ -161,15 +161,15 @@ end
 #   #   end
 #   # end
 # end
-function nmuladd!(C,A,B,D)
-  @turbo for n ∈ axes(C,2), m ∈ axes(C,1)
-    Cmn = D[m,n]
-    for k ∈ axes(B,1)
-      Cmn -= A[m,k]*B[k,n]
-    end
-    C[m,n] = Cmn
-  end
-end
+# function nmuladd!(C,A,B,D)
+#   @turbo for n ∈ axes(C,2), m ∈ axes(C,1)
+#     Cmn = D[m,n]
+#     for k ∈ axes(B,1)
+#       Cmn -= A[m,k]*B[k,n]
+#     end
+#     C[m,n] = Cmn
+#   end
+# end
 
 @generated function rdiv_solve_W_u3!(spc, spa, spu, lbm, n, ubn, ::StaticInt{W}) where {W}
   quote
