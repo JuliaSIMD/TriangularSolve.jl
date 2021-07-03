@@ -1,24 +1,26 @@
 module TriangularSolve
 
 using VectorizationBase, LinearAlgebra #LoopVectorization
-using VectorizationBase: vfnmadd_fast, AbstractStridedPointer, AbstractMask, stridedpointer_preserve
+using VectorizationBase: vfnmadd_fast, AbstractStridedPointer, AbstractMask, stridedpointer_preserve, zero_offsets, gesp, StridedPointer
+using CloseOpenIntervals: CloseOpen, SafeCloseOpen
 
-@generated function solve_AU(A::VecUnroll{Nm1}, spu::AbstractStridedPointer, no) where {Nm1}
+@generated function solve_AU(A::VecUnroll{Nm1}, spu::AbstractStridedPointer, noff, ::Val{UNIT}) where {Nm1, UNIT}
+  A_n_expr = UNIT ? :nothing : :(A_n = Base.FastMath.div_fast(A_n, U_n_n))
   N = Nm1 + 1
   quote
     $(Expr(:meta,:inline))
     Ad = VectorizationBase.data(A)
     Base.Cartesian.@nexprs $N n -> begin
       A_n = Ad[n]
-      Base.Cartesian.@nexprs n m -> begin
-        U_m_n = vload(spu, (no+m,no+n))
+      Base.Cartesian.@nexprs $(UNIT ? :(n-1) : :n) m -> begin
+        U_m_n = vload(spu, (noff+(m-1),noff+(n-1)))
       end
     end
     Base.Cartesian.@nexprs $N n -> begin
       Base.Cartesian.@nexprs n-1 k -> begin
         A_n = Base.FastMath.sub_fast(A_n, Base.FastMath.mul_fast(A_k, U_k_n))
       end
-      A_n = Base.FastMath.div_fast(A_n, U_n_n)
+      $A_n_expr
     end
     VecUnroll(Base.Cartesian.@ntuple $N A)
   end
@@ -100,34 +102,57 @@ end
 #   solve_Wx3W!(ap, bp, U, StaticInt(1) + W + W, StaticInt(1))
 # end
 
+@inline maybestore!(p, v, i) = vstore!(p, v, i)
+@inline maybestore!(::Nothing, v, i) = nothing
 
-function BdivU_small_kern!(spa::AbstractStridedPointer{T}, spb::AbstractStridedPointer{T}, spu::AbstractStridedPointer{T}, m, M, N) where {T}
+@inline maybestore!(p, v, i, m) = vstore!(p, v, i, m)
+@inline maybestore!(::Nothing, v, i, m) = nothing
+
+@inline function store_small_kern!(spa, sp, v, spu, i, n, mask, ::Val{true})
+  vstore!(spa, v, i, mask)
+  vstore!(sp, v, i, mask)
+end
+@inline store_small_kern!(spa, ::Nothing, v, spu, i, n, mask, ::Val{true}) = vstore!(spa, v, i, mask)
+
+@inline function store_small_kern!(spa, sp, v, spu, i, n, mask, ::Val{false})
+  x = v / vload(spu, (n,n))
+  vstore!(spa, x, i, mask)
+  vstore!(sp, x, i, mask)
+end
+@inline store_small_kern!(spa, ::Nothing, v, spu, i, n, mask, ::Val{false}) = vstore!(spa, v / vload(spu, (n,n)), i, mask)
+
+@inline function store_small_kern!(spa, sp, v, spu, i, n, ::Val{true})
+  vstore!(spa, v, i)
+  vstore!(sp, v, i)
+end
+@inline store_small_kern!(spa, ::Nothing, v, spu, i, n, ::Val{true}) = vstore!(spa, v, i)
+
+@inline function store_small_kern!(spa, sp, v, spu, i, n, ::Val{false})
+  x = v / vload(spu, (n,n))
+  vstore!(spa, x, i)
+  vstore!(sp, x, i)
+end
+@inline store_small_kern!(spa, ::Nothing, v, spu, i, n, ::Val{false}) = vstore!(spa, v / vload(spu, (n,n)), i)
+
+function BdivU_small_kern!(spa::AbstractStridedPointer{T}, sp, spb::AbstractStridedPointer{T}, spu::AbstractStridedPointer{T}, N, mask, ::Val{UNIT}) where {T,UNIT}
   W = VectorizationBase.pick_vector_width(T)
-  while m < M
-    ml = m+1
-    mu = m+W
-    maskiter = mu > M
-    mask = maskiter ? VectorizationBase.mask(W, M) : VectorizationBase.max_mask(W)
-    for n ∈ 1:N
-      Amn = vload(spb, (MM(W, ml),n), mask)
-      for k ∈ 1:n-1
-        Amn = vfnmadd_fast(vload(spa, (MM(W, ml),k), mask), vload(spu, (k,n)), Amn)
-      end
-      vstore!(spa, Amn / vload(spu, (n,n)), (MM(W, ml),n), mask)
-    end    
-    m = mu
+  for n ∈ CloseOpen(N)
+    Amn = vload(spb, (MM(W, StaticInt(0)),n), mask)
+    for k ∈ SafeCloseOpen(n)
+      Amn = vfnmadd_fast(vload(spa, (MM(W, StaticInt(0)),k), mask), vload(spu, (k,n)), Amn)
+    end
+    store_small_kern!(spa, sp, Amn, spu, (MM(W, StaticInt(0)),n), n, mask, Val{UNIT}())
   end
 end
-function BdivU_small_kern_u3!(spa::AbstractStridedPointer{T}, spb::AbstractStridedPointer{T}, spu::AbstractStridedPointer{T}, m, N) where {T}
-  WS = VectorizationBase.pick_vector_width(T)
-  W = Int(WS)
-  for n ∈ 1:N
-    Amn = vload(spb, Unroll{1,W,3,1,W,0x0000000000000000,1}((m+1,n)))
-    for k ∈ 1:n-1
-      Amk = vload(spa, Unroll{1,W,3,1,W,0x0000000000000000,1}((m+1,k)))
+function BdivU_small_kern_u3!(spa::AbstractStridedPointer{T}, sp, spb::AbstractStridedPointer{T}, spu::AbstractStridedPointer{T}, N, ::Val{UNIT}) where {T,UNIT}
+  W = Int(VectorizationBase.pick_vector_width(T))
+  for n ∈ CloseOpen(N)
+    Amn = vload(spb, Unroll{1,W,3,1,W,0x0000000000000000,1}((StaticInt(0),n)))
+    for k ∈ SafeCloseOpen(n)
+      Amk = vload(spa, Unroll{1,W,3,1,W,0x0000000000000000,1}((StaticInt(0),k)))
       Amn = vfnmadd_fast(Amk, vload(spu, (k,n)), Amn)
     end
-    vstore!(spa, Amn / vload(spu, (n,n)), Unroll{1,W,3,1,W,0x0000000000000000,1}((m+1,n)))
+    store_small_kern!(spa, sp, Amn, spu, Unroll{1,W,3,1,W,0x0000000000000000,1}((StaticInt(0),n)), n, Val{UNIT}())
   end
 end
 # function BdivU_small!(A::AbstractMatrix{T}, B::AbstractMatrix{T}, U::AbstractMatrix{T}) where {T}
@@ -171,126 +196,187 @@ end
 #   end
 # end
 
-@generated function rdiv_solve_W_u3!(spc, spa, spu, lbm, n, ubn, ::StaticInt{W}) where {W}
+@generated function rdiv_solve_W_u3!(spc, spb, spa, spu, n, ::StaticInt{W}, ::Val{UNIT}) where {W, UNIT}
   quote
     $(Expr(:meta,:inline))
-    lbn = n + 1
-    Nrange = lbn:ubn
     # here, we just want to load the vectors
-    C11 = VectorizationBase.data(vload(spa, Unroll{2,1,$W,1,$W,0x0000000000000000,1}(Unroll{1,$W,3,1,$W,0x0000000000000000,1}((lbm,lbn)))))
+    C11 = VectorizationBase.data(vload(spa, Unroll{2,1,$W,1,$W,0x0000000000000000,1}(Unroll{1,$W,3,1,$W,0x0000000000000000,1}((StaticInt(0),n)))))
     Base.Cartesian.@nexprs $W c -> C11_c = C11[c]
-    for nk ∈ 1:n # nmuladd
-      A11 = vload(spc, Unroll{1,$W,3,1,$W,0x0000000000000000,1}((lbm,nk)))
-      Base.Cartesian.@nexprs $W c -> C11_c = vfnmadd_fast(A11, vload(spu, (nk,n+c)), C11_c)
+    for nk ∈ SafeCloseOpen(n) # nmuladd
+      A11 = vload(spc, Unroll{1,$W,3,1,$W,0x0000000000000000,1}((StaticInt(0),nk)))
+      Base.Cartesian.@nexprs $W c -> C11_c = vfnmadd_fast(A11, vload(spu, (nk,n+(c-1))), C11_c)
     end
-    C11vu = solve_AU(VecUnroll((Base.Cartesian.@ntuple $W C11)), spu, n)
-    vstore!(spc, C11vu, Unroll{2,1,$W,1,$W,0x0000000000000000,1}(Unroll{1,$W,3,1,$W,0x0000000000000000,1}((lbm,lbn))))
+    C11vu = solve_AU(VecUnroll((Base.Cartesian.@ntuple $W C11)), spu, n, Val{$UNIT}())
+    i = Unroll{2,1,$W,1,$W,0x0000000000000000,1}(Unroll{1,$W,3,1,$W,0x0000000000000000,1}((StaticInt(0),n)))
+    vstore!(spc, C11vu, i)
+    maybestore!(spb, C11vu, i)
   end
 end
-@generated function rdiv_solve_W_u1!(spc, spa, spu, lbm, n, ubn, mask::AbstractMask{W}) where {W}
+@generated function rdiv_solve_W_u1!(spc, spb, spa, spu, n, mask::AbstractMask{W}, ::Val{UNIT}) where {W, UNIT}
   quote
     $(Expr(:meta,:inline))
-    lbn = n + 1
-    Nrange = lbn:ubn
     # here, we just want to load the vectors
-    C11 = VectorizationBase.data(vload(spa, Unroll{2,1,$W,1,$W,0xffffffffffffffff,1}((lbm,lbn)), mask))
+    C11 = VectorizationBase.data(vload(spa, Unroll{2,1,$W,1,$W,0xffffffffffffffff,1}((StaticInt(0),n)), mask))
     Base.Cartesian.@nexprs $W c -> C11_c = C11[c]
-    for nk ∈ 1:n # nmuladd
-      A11 = vload(spc, (MM{$W}(lbm),nk), mask)
-      Base.Cartesian.@nexprs $W c -> C11_c =  vfnmadd_fast(A11, vload(spu, (nk,n+c)), C11_c)
+    for nk ∈ SafeCloseOpen(n) # nmuladd
+      A11 = vload(spc, (MM{$W}(StaticInt(0)),nk), mask)
+      Base.Cartesian.@nexprs $W c -> C11_c =  vfnmadd_fast(A11, vload(spu, (nk,n+(c-1))), C11_c)
     end
     C11 = VecUnroll((Base.Cartesian.@ntuple $W C11))
-    C11 = solve_AU(C11, spu, n)
-    vstore!(spc, C11, Unroll{2,1,$W,1,$W,0xffffffffffffffff,1}((lbm,lbn)), mask)
+    C11 = solve_AU(C11, spu, n, Val{$UNIT}())
+    i = Unroll{2,1,$W,1,$W,0xffffffffffffffff,1}((StaticInt(0),n))
+    vstore!(spc, C11, i, mask)
+    maybestore!(spb, C11, i, mask)
   end
 end
 
-rdiv!(A, U::UpperTriangular) = rdiv_U!(A, A, parent(U))
-rdiv!(C, A, U::UpperTriangular) = rdiv_U!(C, A, parent(U))
-function rdiv_U!(C::AbstractMatrix{T}, A::AbstractMatrix{T}, U::AbstractMatrix{T}) where {T}
+rdiv!(A, U::UpperTriangular) = rdiv_U!(A, A, parent(U), Val(false))
+rdiv!(C, A, U::UpperTriangular) = rdiv_U!(C, A, parent(U), Val(false))
+rdiv!(A, U::UnitUpperTriangular) = rdiv_U!(A, A, parent(U), Val(true))
+rdiv!(C, A, U::UnitUpperTriangular) = rdiv_U!(C, A, parent(U), Val(true))
+function rdiv_U!(C::AbstractMatrix{T}, A::AbstractMatrix{T}, U::AbstractMatrix{T}, ::Val{UNIT}) where {T,UNIT}
   M, N = size(A)
+  ((N == 0) | (M == 0)) && return C
   WS = pick_vector_width(T)
   W = Int(WS)
   W3 = StaticInt(3)*WS
   if VectorizationBase.register_count() > WS*StaticInt(3)
     # We have enough registers to use the 3W functions.
-    Md, Mr = VectorizationBase.vdivrem(M, W3)
+    # Md, Mr = VectorizationBase.vdivrem(M, W3)
+    M3 = M
     Nd, Nr = VectorizationBase.vdivrem(N, W3)
   else
     # We do not have enough registers.
-    Md = Nd = 0;
-    Mr = M;
+    M3 = 0
+    Nd = 0;
+    # Mr = M;
     Nr = N;
   end
-  Mrd8, Mrr8 = VectorizationBase.vdivrem(Mr, WS)
+  # Mrd8, Mrr8 = VectorizationBase.vdivrem(Mr, WS)
   Nrd8, Nrr8 = VectorizationBase.vdivrem(Nr, WS)
   Nrd8main = Nrd8+Nd*3
-  spa, spap = stridedpointer_preserve(A)
-  spc, spcp = stridedpointer_preserve(C)
-  spu, spup = stridedpointer_preserve(U)
+  _spa, spap = stridedpointer_preserve(A)
+  _spc, spcp = stridedpointer_preserve(C)
+  _spu, spup = stridedpointer_preserve(U)
+  spa = zero_offsets(_spa)
+  spc = zero_offsets(_spc)
+  spu = zero_offsets(_spu)
   GC.@preserve spap spcp spup begin
     m = 0
-    for _ ∈ 1:Md
-      lbm = m+1
-      ubm = m+W3
-      Mrange = lbm:ubm
-      
+    while m < M3 - W3 + 1
       n = 0
       if Nrr8 > 0
         n = Nrr8
-        BdivU_small_kern_u3!(spc, spa, spu, m, Nrr8)
+        BdivU_small_kern_u3!(spc, nothing, spa, spu, Nrr8, Val(UNIT))
         # BdivU_small!(view(C,Mrange,1:n),view(A,Mrange,1:n),view(U,1:n,1:n))
       end
       for i ∈ 1:Nrd8main
-        ubn = n+W
-        rdiv_solve_W_u3!(spc, spa, spu, lbm, n, ubn, WS)
-        n = ubn
+        rdiv_solve_W_u3!(spc, nothing, spa, spu, n, WS, Val(UNIT))
+        n += W
       end
-      #   for _ ∈ 1:Nd
-      #     lbn = n+1
-      #     ubn = n+W3
-      #     Nrange = lbn:ubn
-      #     if n == 0
-      #       solve_3Wx3W!(view(C, Mrange, Nrange), view(A, Mrange, Nrange), view(U, Nrange, Nrange))
-      #     else
-      #       Cview = view(C, Mrange, Nrange)
-      #       nmuladd!(Cview, view(C, Mrange, 1:n), view(U, 1:n, Nrange), view(A, Mrange, Nrange))
-      #       solve_3Wx3W!(Cview, Cview, view(U, Nrange, Nrange))
-      #     end
-      #     n = ubn
-      #   end
+      m += W3
+      spa = gesp(spa, (W3,StaticInt(0)))
+      spc = gesp(spc, (W3,StaticInt(0)))
+    end
+    finalmask = VectorizationBase.mask(WS, M)
+    while m < M
+      ubm = m+W
+      nomaskiter = ubm < M
+      mask = nomaskiter ? VectorizationBase.max_mask(WS) : finalmask
+      n = Nrr8
+      if n > 0
+        BdivU_small_kern!(spc, nothing, spa, spu, n, mask, Val(UNIT))
+      end
+      for _ ∈ 1:Nrd8main
+        rdiv_solve_W_u1!(spc, nothing, spa, spu, n, mask, Val(UNIT))
+        n += W
+      end
+      spa = gesp(spa, (WS,StaticInt(0)))
+      spc = gesp(spc, (WS,StaticInt(0)))
       m = ubm
     end
-    for _ ∈ 1:Mrd8+(Mrr8>0)
-      lbm = m+1
-      ubm = m+W
-      maskiter = ubm > M
-      mask = maskiter ? VectorizationBase.mask(WS,Mrr8) : VectorizationBase.max_mask(WS)
-      ubm = min(M,ubm)
-      Mrange = lbm:ubm
-      n = 0
-      if Nrr8 > 0
-        n = Nrr8
-        BdivU_small_kern!(spc, spa, spu, m, ubm, n)
+  end
+  C
+end
+
+const LDIVBUFFERS = Vector{UInt8}[]
+function lubuffer(::Val{T}, N) where {T}
+  buff = LDIVBUFFERS[Threads.threadid()]
+  RS3 = StaticInt{3}()*VectorizationBase.register_size()
+  L = RS3*N
+  L > length(buff) && resize!(buff, L)
+  ptr = Base.unsafe_convert(Ptr{T}, buff)
+  StridedPointer{T,2,1,0,(1,2)}(ptr, (VectorizationBase.static_sizeof(T), RS3), (StaticInt(0),StaticInt(0)))
+end
+ldiv!(U::LowerTriangular, A) = ldiv_L!(A, A, parent(U), Val(false))
+ldiv!(C, U::LowerTriangular, A) = ldiv_L!(C, A, parent(U), Val(false))
+ldiv!(U::UnitLowerTriangular, A) = ldiv_L!(A, A, parent(U), Val(true))
+ldiv!(C, U::UnitLowerTriangular, A) = ldiv_L!(C, A, parent(U), Val(true))
+function ldiv_L!(C::AbstractMatrix{T}, A::AbstractMatrix{T}, U::AbstractMatrix{T}, ::Val{UNIT}) where {T,UNIT}
+  N, M = size(A)
+  ((N == 0) | (M == 0)) && return C
+  WS = pick_vector_width(T)
+  W = Int(WS)
+  W3 = StaticInt(3)*WS
+  if VectorizationBase.register_count() > WS*StaticInt(3)
+    # We have enough registers to use the 3W functions.
+    M3 = M
+    # Md, Mr = VectorizationBase.vdivrem(M, W3)
+    Nd, Nr = VectorizationBase.vdivrem(N, W3)
+  else
+    # We do not have enough registers.
+    Nd = 0;
+    M3 = 0
+    Nr = N;
+  end
+  # Mrd8, Mrr8 = VectorizationBase.vdivrem(Mr, WS)
+  
+  Nrd8, Nrr8 = VectorizationBase.vdivrem(Nr, WS)
+  Nrd8main = Nrd8+Nd*3
+  _spa, spap = stridedpointer_preserve(A')
+  _spc, spcp = stridedpointer_preserve(C')
+  _spu, spup = stridedpointer_preserve(U')
+  spa = zero_offsets(_spa)
+  spc = zero_offsets(_spc)
+  spu = zero_offsets(_spu)
+  # if Nrd8 == 0
+  #   spb = spa
+  # else
+  spb = lubuffer(Val(T), N)
+  # @show M3, M, Nrd8main, Nrr8
+  # end
+  GC.@preserve spap spcp spup begin
+    m = 0
+    while m < M3 - W3 + 1
+      n = Nrr8
+      if n > 0
+        BdivU_small_kern_u3!(spb, spc, spa, spu, Nrr8, Val(UNIT))
         # BdivU_small!(view(C,Mrange,1:n),view(A,Mrange,1:n),view(U,1:n,1:n))
       end
       for i ∈ 1:Nrd8main
-        ubn = n+W
-        rdiv_solve_W_u1!(spc, spa, spu, lbm, n, ubn, mask)
-        n = ubn
+        rdiv_solve_W_u3!(spb, spc, spa, spu, n, WS, Val(UNIT))
+        n += W
       end
-      # for _ ∈ 1:Nd
-      #   lbn = n+1
-      #   ubn = n+W3
-      #   Nrange = lbn:ubn
-      #   if n == 0
-      #     solve_Wx3W!(spc, spa, view(U, Nrange, Nrange), lbm, lbn, mask)
-      #   else
-      #     nmuladd!(view(C, Mrange, Nrange), view(C, Mrange, 1:n), view(U, 1:n, Nrange), view(A, Mrange, Nrange))
-      #     solve_Wx3W!(spc, spc, view(U, Nrange, Nrange), lbm, lbn, mask)
-      #   end
-      #   n = ubn
-      # end
+      m += W3
+      spa = gesp(spa, (W3,StaticInt(0)))
+      spc = gesp(spc, (W3,StaticInt(0)))
+    end
+    finalmask = VectorizationBase.mask(WS, M)
+    while m < M
+      ubm = m+W
+      nomaskiter = ubm < M
+      mask = nomaskiter ? VectorizationBase.max_mask(WS) : finalmask
+      n = Nrr8
+      if n > 0
+        BdivU_small_kern!(spb, spc, spa, spu, n, mask, Val(UNIT))
+      end
+      for _ ∈ 1:Nrd8main
+        # @show C, n
+        rdiv_solve_W_u1!(spb, spc, spa, spu, n, mask, Val(UNIT))
+        n += W
+      end
+      spa = gesp(spa, (WS,StaticInt(0)))
+      spc = gesp(spc, (WS,StaticInt(0)))
       m = ubm
     end
   end
@@ -298,6 +384,12 @@ function rdiv_U!(C::AbstractMatrix{T}, A::AbstractMatrix{T}, U::AbstractMatrix{T
 end
 
 
-
+function __init__()
+  nthread = Threads.nthreads()
+  resize!(LDIVBUFFERS, nthread)
+  for i ∈ 1:nthread
+    LDIVBUFFERS[i] = Vector{UInt8}(undef, 3VectorizationBase.register_size()*128)
+  end
+end
 
 end
