@@ -6,11 +6,11 @@ function test_solve(::Type{T}) where {T}
     for m ∈ max(1,n-10):n+10
       A = rand(T, m, n); res = similar(A);
       B = rand(T, n, n);      
-      @test TriangularSolve.rdiv!(res, A, UpperTriangular(B)) ≈ A / UpperTriangular(B)
-      @test TriangularSolve.rdiv!(res, A, UnitUpperTriangular(B)) ≈ A / UnitUpperTriangular(B)
+      @test TriangularSolve.rdiv!(res, A, UpperTriangular(B)) ≈ A / UpperTriangular(B) rtol=sqrt(eps(T))
+      @test TriangularSolve.rdiv!(res, A, UnitUpperTriangular(B)) ≈ A / UnitUpperTriangular(B) rtol=sqrt(eps(T))
       A = rand(T, n, m); res = similar(A);
-      @test TriangularSolve.ldiv!(res, LowerTriangular(B), A) ≈ LowerTriangular(B) \ A
-      @test TriangularSolve.ldiv!(res, UnitLowerTriangular(B), A) ≈ UnitLowerTriangular(B) \ A
+      @test TriangularSolve.ldiv!(res, LowerTriangular(B), A) ≈ LowerTriangular(B) \ A rtol=sqrt(eps(T))
+      @test TriangularSolve.ldiv!(res, UnitLowerTriangular(B), A) ≈ UnitLowerTriangular(B) \ A rtol=sqrt(eps(T))
     end
   end
 end
