@@ -2,10 +2,11 @@ using TriangularSolve, LinearAlgebra
 using Test
 
 function test_solve(::Type{T}) where {T}
-  for n ∈ 1:100
+  for n ∈ 1:(T === Float32 ? 100 : 200)
+    @show n
     for m ∈ max(1,n-10):n+10
       A = rand(T, m, n); res = similar(A);
-      B = rand(T, n, n) + I;
+      B = rand(T, n, n) + I
       @test TriangularSolve.rdiv!(res, A, UpperTriangular(B)) * UpperTriangular(B) ≈ A
       @test TriangularSolve.rdiv!(res, A, UnitUpperTriangular(B)) * UnitUpperTriangular(B) ≈ A
       A = rand(T, n, m); res = similar(A);

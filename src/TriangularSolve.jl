@@ -289,15 +289,19 @@ function lubuffer(::Val{T}, ::StaticInt{UF}, N) where {T, UF}
   ptr = Base.unsafe_convert(Ptr{T}, buff)
   StridedPointer{T,2,1,0,(1,2)}(ptr, (VectorizationBase.static_sizeof(T), RSUF), (StaticInt(0),StaticInt(0)))
 end
-rdiv!(A, U::UpperTriangular) = (div_dispatch!(A, A, parent(U), Val(false)); return A)
-rdiv!(C, A, U::UpperTriangular) = (div_dispatch!(C, A, parent(U), Val(false)); return C)
-rdiv!(A, U::UnitUpperTriangular) = (div_dispatch!(A, A, parent(U), Val(true)); return A)
-rdiv!(C, A, U::UnitUpperTriangular) = (div_dispatch!(C, A, parent(U), Val(true)); return C)
+rdiv!(A::AbstractMatrix{T}, U::UpperTriangular{T}) where {T<:Union{Float32,Float64}} = (div_dispatch!(A, A, parent(U), Val(false)); return A)
+rdiv!(C::AbstractMatrix{T}, A::AbstractMatrix{T}, U::UpperTriangular{T}) where {T<:Union{Float32,Float64}} = (div_dispatch!(C, A, parent(U), Val(false)); return C)
+rdiv!(A::AbstractMatrix{T}, U::UnitUpperTriangular{T}) where {T<:Union{Float32,Float64}} = (div_dispatch!(A, A, parent(U), Val(true)); return A)
+rdiv!(C::AbstractMatrix{T}, A::AbstractMatrix{T}, U::UnitUpperTriangular{T}) where {T<:Union{Float32,Float64}} = (div_dispatch!(C, A, parent(U), Val(true)); return C)
 
-ldiv!(U::LowerTriangular, A) = (div_dispatch!(A', A', parent(U)', Val(false)); return A)
-ldiv!(C, U::LowerTriangular, A) = (div_dispatch!(C', A', parent(U)', Val(false)); return C)
-ldiv!(U::UnitLowerTriangular, A) = (div_dispatch!(A', A', parent(U)', Val(true)); return A)
-ldiv!(C, U::UnitLowerTriangular, A) = (div_dispatch!(C', A', parent(U)', Val(true)); return C)
+ldiv!(U::LowerTriangular{T}, A::AbstractMatrix{T}) where {T<:Union{Float32,Float64}} = (div_dispatch!(A', A', parent(U)', Val(false)); return A)
+ldiv!(C::AbstractMatrix{T}, U::LowerTriangular{T}, A::AbstractMatrix{T}) where {T<:Union{Float32,Float64}} = (div_dispatch!(C', A', parent(U)', Val(false)); return C)
+ldiv!(U::UnitLowerTriangular{T}, A::AbstractMatrix{T}) where {T<:Union{Float32,Float64}} = (div_dispatch!(A', A', parent(U)', Val(true)); return A)
+ldiv!(C::AbstractMatrix{T}, U::UnitLowerTriangular{T}, A::AbstractMatrix{T}) where {T<:Union{Float32,Float64}} = (div_dispatch!(C', A', parent(U)', Val(true)); return C)
+
+ldiv!(A, B) = LinearAlgebra.ldiv!(A, B)
+ldiv!(Y, A, B) = LinearAlgebra.ldiv!(Y, A, B)
+rdiv!(A, B) = LinearAlgebra.rdiv!(A, B)
 
 function block_size(::Val{T}) where {T}
   elements_l2 = (VectorizationBase.cache_size(StaticInt(2))*StaticInt(19)) ÷ (VectorizationBase.static_sizeof(T)*StaticInt(60))
@@ -321,9 +325,9 @@ function rdiv_block_N!(
   spc_base = spc
   n = 0
   W = VectorizationBase.pick_vector_width(T)
-  B_normalized = Bsize === nothing ? VectorizationBase.vcld(N, VectorizationBase.vcld(N, B)*W)*W : Bsize
-  N_temp = B_normalized
-  repeat = true
+  B_normalized = Bsize === nothing ? VectorizationBase.vcld(N, VectorizationBase.vcld(N, block_size(Val(T)))*W)*W : Bsize
+  repeat = N > B_normalized  
+  N_temp = Core.ifelse(repeat, B_normalized, N)
   while true
     # println("Solve with N_temp = $N_temp and n = $n")
     rdiv_U!(spc, spa_rdiv, gesp(spu, (n,StaticInt{0}())), M, N_temp, StaticInt{X}(), Val(UNIT))
@@ -383,39 +387,23 @@ function m_thread_block_size(M, N, ::Val{T}) where {T}
 end
 
 function multithread_rdiv!(
-  spc::AbstractStridedPointer{T}, spa, spu, M, N, mtb, ::Val{true}, ::StaticInt{X}
-) where {X,T}
-  
+  spc::AbstractStridedPointer{T}, spa, spu, M, N, mtb, ::Val{UNIT}, ::StaticInt{X}
+) where {X,T,UNIT}
+  (Md, Mr) = VectorizationBase.vdivrem(M, mtb)
+  Nblock = Md + (Mr ≠ 0)
+  Mrem = Core.ifelse(Mr ≠ 0, Mr, mtb)
+  # @show mtb, Nblock, Mrem, Md, Mr
+  # return
   let (Md, Mr) = VectorizationBase.vdivrem(M, mtb), Nblock = Md + (Mr ≠ 0), Mrem = Core.ifelse(Mr ≠ 0, Mr, mtb)
     @batch for block in CloseOpen(Nblock)
+    # let block = 0
       Mtemp = Core.ifelse(block == Nblock-1, Mrem, mtb)
       rdiv_block_MandN!(
+      # rdiv_block_N!(
         gesp(spc, (mtb*block, StaticInt{0}())),
         gesp(spa, (mtb*block, StaticInt{0}())),
-        spu, Mtemp, N, Val(true), StaticInt{X}()
-      )
-    end
-  end
-  # nlaunch = Md - (Mr == 0)
-  # threads, torelease = Polyester.request_threads(Base.Threads.threadid(), nlaunch)
-  # nthread = length(threads)
-  # if (nthread % Int32) ≤ zero(Int32)
-  #   return rdiv_block_MandN!(spc, spa, spu, M, N, Val(UNIT), StaticInt{X}())
-  # end
-  # nbatch = nthread + one(nthread)
-  
-end
-function multithread_rdiv!(
-  spc::AbstractStridedPointer{T}, spa, spu, M, N, mtb, ::Val{false}, ::StaticInt{X}
-) where {X,T}
-  
-  let (Md, Mr) = VectorizationBase.vdivrem(M, mtb), Nblock = Md + (Mr ≠ 0), Mrem = Core.ifelse(Mr ≠ 0, Mr, mtb)
-    @batch for block in CloseOpen(Nblock)
-      Mtemp = Core.ifelse(block == Nblock-1, Mrem, mtb)
-      rdiv_block_MandN!(
-        gesp(spc, (mtb*block, StaticInt{0}())),
-        gesp(spa, (mtb*block, StaticInt{0}())),
-        spu, Mtemp, N, Val(false), StaticInt{X}()
+        spu, Mtemp, N, Val{UNIT}(), StaticInt{X}()
+        # spu, M, N, Val{UNIT}(), StaticInt{X}()
       )
     end
   end
@@ -441,16 +429,10 @@ function div_dispatch!(C::AbstractMatrix{T}, A, U, ::Val{UNIT}) where {UNIT,T}
   GC.@preserve spap spcp spup begin
     mtb = m_thread_block_size(M, N, Val(T))
     M > mtb && return multithread_rdiv!(spc, spa, spu, M, N, mtb, Val(UNIT), VectorizationBase.contiguous_axis(A))
-    B = block_size(Val(T))
-    if N > B
-      rdiv_block_MandN!(spc, spa, spu, M, N, Val(UNIT), VectorizationBase.contiguous_axis(A))
-    else
-    # if N ≥ 32
-      rdiv_U!(spc, spa, spu, M, N, VectorizationBase.contiguous_axis(A), Val(UNIT))
-    # else
-      # rdiv_U!(spc, spa, spu, M, N, StaticInt(1), Val(UNIT))
-      # end
+    if VectorizationBase.num_threads() == 1
+      N > block_size(Val(T)) && return rdiv_block_MandN!(spc, spa, spu, M, N, Val(UNIT), VectorizationBase.contiguous_axis(A))
     end
+    rdiv_U!(spc, spa, spu, M, N, VectorizationBase.contiguous_axis(A), Val(UNIT))
   end
 end
 
