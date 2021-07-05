@@ -3,6 +3,10 @@ module TriangularSolve
 using VectorizationBase, LinearAlgebra #LoopVectorization
 using VectorizationBase: vfnmadd_fast, AbstractStridedPointer, AbstractMask, stridedpointer_preserve, zero_offsets, gesp, StridedPointer
 using CloseOpenIntervals: CloseOpen, SafeCloseOpen
+using Static
+using IfElse: ifelse
+using LoopVectorization
+using Polyester
 
 @generated function solve_AU(A::VecUnroll{Nm1}, spu::AbstractStridedPointer, noff, ::Val{UNIT}) where {Nm1, UNIT}
   A_n_expr = UNIT ? :nothing : :(A_n = Base.FastMath.div_fast(A_n, U_n_n))
@@ -285,17 +289,135 @@ function lubuffer(::Val{T}, ::StaticInt{UF}, N) where {T, UF}
   ptr = Base.unsafe_convert(Ptr{T}, buff)
   StridedPointer{T,2,1,0,(1,2)}(ptr, (VectorizationBase.static_sizeof(T), RSUF), (StaticInt(0),StaticInt(0)))
 end
-rdiv!(A, U::UpperTriangular) = (div_dispatch!(A, A, parent(U), Val(false)); return A)
-rdiv!(C, A, U::UpperTriangular) = (div_dispatch!(C, A, parent(U), Val(false)); return C)
-rdiv!(A, U::UnitUpperTriangular) = (div_dispatch!(A, A, parent(U), Val(true)); return A)
-rdiv!(C, A, U::UnitUpperTriangular) = (div_dispatch!(C, A, parent(U), Val(true)); return C)
+rdiv!(A::AbstractMatrix{T}, U::UpperTriangular{T}) where {T<:Union{Float32,Float64}} = (div_dispatch!(A, A, parent(U), Val(false)); return A)
+rdiv!(C::AbstractMatrix{T}, A::AbstractMatrix{T}, U::UpperTriangular{T}) where {T<:Union{Float32,Float64}} = (div_dispatch!(C, A, parent(U), Val(false)); return C)
+rdiv!(A::AbstractMatrix{T}, U::UnitUpperTriangular{T}) where {T<:Union{Float32,Float64}} = (div_dispatch!(A, A, parent(U), Val(true)); return A)
+rdiv!(C::AbstractMatrix{T}, A::AbstractMatrix{T}, U::UnitUpperTriangular{T}) where {T<:Union{Float32,Float64}} = (div_dispatch!(C, A, parent(U), Val(true)); return C)
 
-ldiv!(U::LowerTriangular, A) = (div_dispatch!(A', A', parent(U)', Val(false)); return A)
-ldiv!(C, U::LowerTriangular, A) = (div_dispatch!(C', A', parent(U)', Val(false)); return C)
-ldiv!(U::UnitLowerTriangular, A) = (div_dispatch!(A', A', parent(U)', Val(true)); return A)
-ldiv!(C, U::UnitLowerTriangular, A) = (div_dispatch!(C', A', parent(U)', Val(true)); return C)
+ldiv!(U::LowerTriangular{T}, A::AbstractMatrix{T}) where {T<:Union{Float32,Float64}} = (div_dispatch!(transpose(A), transpose(A), transpose(parent(U)), Val(false)); return A)
+ldiv!(C::AbstractMatrix{T}, U::LowerTriangular{T}, A::AbstractMatrix{T}) where {T<:Union{Float32,Float64}} = (div_dispatch!(transpose(C), transpose(A), transpose(parent(U)), Val(false)); return C)
+ldiv!(U::UnitLowerTriangular{T}, A::AbstractMatrix{T}) where {T<:Union{Float32,Float64}} = (div_dispatch!(transpose(A), transpose(A), transpose(parent(U)), Val(true)); return A)
+ldiv!(C::AbstractMatrix{T}, U::UnitLowerTriangular{T}, A::AbstractMatrix{T}) where {T<:Union{Float32,Float64}} = (div_dispatch!(transpose(C), transpose(A), transpose(parent(U)), Val(true)); return C)
 
-function div_dispatch!(C, A, U, ::Val{UNIT}) where {UNIT}
+ldiv!(A, B) = LinearAlgebra.ldiv!(A, B)
+ldiv!(Y, A, B) = LinearAlgebra.ldiv!(Y, A, B)
+rdiv!(A, B) = LinearAlgebra.rdiv!(A, B)
+
+function block_size(::Val{T}) where {T}
+  elements_l2 = (VectorizationBase.cache_size(StaticInt(2))*StaticInt(19)) ÷ (VectorizationBase.static_sizeof(T)*StaticInt(60))
+  Static.floortostaticint(sqrt(elements_l2))
+end
+
+function nmuladd!(C, A, U, M, K, N)
+  @turbo for n ∈ CloseOpen(N), m ∈ CloseOpen(M)
+    Cmn = A[m,n]
+    for k ∈ CloseOpen(K)
+      Cmn -= C[m,k]*U[k,n]
+    end
+    C[m,K+n] = Cmn
+  end
+end
+
+function rdiv_block_N!(
+  spc::AbstractStridedPointer{T}, spa, spu, M, N, ::Val{UNIT}, ::StaticInt{X}, Bsize = nothing
+) where {T,UNIT,X}
+  spa_rdiv = spa
+  spc_base = spc
+  n = 0
+  W = VectorizationBase.pick_vector_width(T)
+  B_normalized = Bsize === nothing ? VectorizationBase.vcld(N, VectorizationBase.vcld(N, block_size(Val(T)))*W)*W : Bsize
+  repeat = N > B_normalized  
+  N_temp = Core.ifelse(repeat, B_normalized, N)
+  while true
+    # println("Solve with N_temp = $N_temp and n = $n")
+    rdiv_U!(spc, spa_rdiv, gesp(spu, (n,StaticInt{0}())), M, N_temp, StaticInt{X}(), Val(UNIT))
+    repeat || break
+    
+    spa = gesp(spa, (StaticInt(0), B_normalized))
+    spc = gesp(spc, (StaticInt(0), B_normalized))
+    spu = gesp(spu, (StaticInt(0), B_normalized))
+    nnext = n + B_normalized
+    # N_temp = 
+    n += B_normalized
+    repeat = n + B_normalized < N
+    N_temp = repeat ? N_temp : N - n
+    # N_temp = min(n + B_normalized, N) - n
+    # println("nmuladd with N_temp = $N_temp and n = $n")
+    # mul!(
+    #   copyto!(view(C, :, n+1:n+N_temp), view(A, :, n+1:n+N_temp)),
+    #   view(C, :, 1:n),
+    #   view(U, 1:n, n+1:n+N_temp),
+    #   -1.0, 1.0
+    # )
+    nmuladd!(spc_base, spa, spu, M, n, N_temp)
+    spa_rdiv = spc
+  end
+end
+function rdiv_block_MandN!(
+  spc::AbstractStridedPointer{T}, spa, spu, M, N, ::Val{UNIT}, ::StaticInt{X}
+) where {T,UNIT,X}
+  B = block_size(Val(T))
+  W = VectorizationBase.pick_vector_width(T)
+  B_normalized = VectorizationBase.vcld(N, VectorizationBase.vcld(N, B)*W)*W
+  WUF = W*unroll_factor(W)
+  B_m = VectorizationBase.vcld(M, VectorizationBase.vcld(M, B)*WUF)*WUF
+  m = 0
+  while m < M
+    mu = m + B_m
+    Mtemp = min(M, mu) - m
+    rdiv_block_N!(
+      spc, spa, spu, Mtemp, N, Val(UNIT), StaticInt{X}(),
+      VectorizationBase.vcld(N, VectorizationBase.vcld(N, B)*W)*W
+    )
+    spa = gesp(spa, (B_m, StaticInt{0}()))
+    spc = gesp(spc, (B_m, StaticInt{0}()))
+    m = mu
+  end
+end
+function _nthreads()
+  nc = VectorizationBase.num_cores()
+  nt = VectorizationBase.num_threads()
+  ifelse(Static.lt(nc,nt),nc,nt)
+end
+function m_thread_block_size(M, N, ::Val{T}) where {T}
+  W = VectorizationBase.pick_vector_width(T)
+  WUF = W * unroll_factor(W)
+  nb = clamp(VectorizationBase.vdiv(M * N, StaticInt{256}() * W), 1, Int(_nthreads()))
+  min(M, VectorizationBase.vcld(M, nb*W)*W)
+end
+
+function multithread_rdiv!(
+  spc::AbstractStridedPointer{T}, spa, spu, M, N, mtb, ::Val{UNIT}, ::StaticInt{X}
+) where {X,T,UNIT}
+  (Md, Mr) = VectorizationBase.vdivrem(M, mtb)
+  Nblock = Md + (Mr ≠ 0)
+  Mrem = Core.ifelse(Mr ≠ 0, Mr, mtb)
+  # @show mtb, Nblock, Mrem, Md, Mr
+  # return
+  let (Md, Mr) = VectorizationBase.vdivrem(M, mtb), Nblock = Md + (Mr ≠ 0), Mrem = Core.ifelse(Mr ≠ 0, Mr, mtb)
+    @batch for block in CloseOpen(Nblock)
+    # let block = 0
+      Mtemp = Core.ifelse(block == Nblock-1, Mrem, mtb)
+      rdiv_block_MandN!(
+      # rdiv_block_N!(
+        gesp(spc, (mtb*block, StaticInt{0}())),
+        gesp(spa, (mtb*block, StaticInt{0}())),
+        spu, Mtemp, N, Val{UNIT}(), StaticInt{X}()
+        # spu, M, N, Val{UNIT}(), StaticInt{X}()
+      )
+    end
+  end
+  # nlaunch = Md - (Mr == 0)
+  # threads, torelease = Polyester.request_threads(Base.Threads.threadid(), nlaunch)
+  # nthread = length(threads)
+  # if (nthread % Int32) ≤ zero(Int32)
+  #   return rdiv_block_MandN!(spc, spa, spu, M, N, Val(UNIT), StaticInt{X}())
+  # end
+  # nbatch = nthread + one(nthread)
+  
+end
+
+function div_dispatch!(C::AbstractMatrix{T}, A, U, ::Val{UNIT}) where {UNIT,T}
   M, N = size(A)
   ((N == 0) | (M == 0)) && return C
   _spa, spap = stridedpointer_preserve(A)
@@ -305,11 +427,12 @@ function div_dispatch!(C, A, U, ::Val{UNIT}) where {UNIT}
   spc = zero_offsets(_spc)
   spu = zero_offsets(_spu)
   GC.@preserve spap spcp spup begin
-    # if N ≥ 32
+    mtb = m_thread_block_size(M, N, Val(T))
+    M > mtb && return multithread_rdiv!(spc, spa, spu, M, N, mtb, Val(UNIT), VectorizationBase.contiguous_axis(A))
+    if VectorizationBase.num_threads() == 1
+      N > block_size(Val(T)) && return rdiv_block_MandN!(spc, spa, spu, M, N, Val(UNIT), VectorizationBase.contiguous_axis(A))
+    end
     rdiv_U!(spc, spa, spu, M, N, VectorizationBase.contiguous_axis(A), Val(UNIT))
-    # else
-      # rdiv_U!(spc, spa, spu, M, N, StaticInt(1), Val(UNIT))
-    # end
   end
 end
 
@@ -321,7 +444,7 @@ end
 # num_blocks = (register_count() - 1) ÷ (W + 1)
 function unroll_factor(::StaticInt{W}) where {W}
   num_blocks = (VectorizationBase.register_count() - StaticInt{1}()) ÷ (StaticInt{W}() + StaticInt{1}())
-  VectorizationBase.ifelse(VectorizationBase.lt(num_blocks, StaticInt{1}()), StaticInt{1}(), num_blocks)
+  ifelse(Static.lt(num_blocks, StaticInt{1}()), StaticInt{1}(), num_blocks)
 end
 
 function rdiv_U!(spc::AbstractStridedPointer{T}, spa, spu, M, N, ::StaticInt, ::Val{UNIT}) where {T,UNIT}
