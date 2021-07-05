@@ -294,10 +294,10 @@ rdiv!(C::AbstractMatrix{T}, A::AbstractMatrix{T}, U::UpperTriangular{T}) where {
 rdiv!(A::AbstractMatrix{T}, U::UnitUpperTriangular{T}) where {T<:Union{Float32,Float64}} = (div_dispatch!(A, A, parent(U), Val(true)); return A)
 rdiv!(C::AbstractMatrix{T}, A::AbstractMatrix{T}, U::UnitUpperTriangular{T}) where {T<:Union{Float32,Float64}} = (div_dispatch!(C, A, parent(U), Val(true)); return C)
 
-ldiv!(U::LowerTriangular{T}, A::AbstractMatrix{T}) where {T<:Union{Float32,Float64}} = (div_dispatch!(A', A', parent(U)', Val(false)); return A)
-ldiv!(C::AbstractMatrix{T}, U::LowerTriangular{T}, A::AbstractMatrix{T}) where {T<:Union{Float32,Float64}} = (div_dispatch!(C', A', parent(U)', Val(false)); return C)
-ldiv!(U::UnitLowerTriangular{T}, A::AbstractMatrix{T}) where {T<:Union{Float32,Float64}} = (div_dispatch!(A', A', parent(U)', Val(true)); return A)
-ldiv!(C::AbstractMatrix{T}, U::UnitLowerTriangular{T}, A::AbstractMatrix{T}) where {T<:Union{Float32,Float64}} = (div_dispatch!(C', A', parent(U)', Val(true)); return C)
+ldiv!(U::LowerTriangular{T}, A::AbstractMatrix{T}) where {T<:Union{Float32,Float64}} = (div_dispatch!(transpose(A), transpose(A), transpose(parent(U)), Val(false)); return A)
+ldiv!(C::AbstractMatrix{T}, U::LowerTriangular{T}, A::AbstractMatrix{T}) where {T<:Union{Float32,Float64}} = (div_dispatch!(transpose(C), transpose(A), transpose(parent(U)), Val(false)); return C)
+ldiv!(U::UnitLowerTriangular{T}, A::AbstractMatrix{T}) where {T<:Union{Float32,Float64}} = (div_dispatch!(transpose(A), transpose(A), transpose(parent(U)), Val(true)); return A)
+ldiv!(C::AbstractMatrix{T}, U::UnitLowerTriangular{T}, A::AbstractMatrix{T}) where {T<:Union{Float32,Float64}} = (div_dispatch!(transpose(C), transpose(A), transpose(parent(U)), Val(true)); return C)
 
 ldiv!(A, B) = LinearAlgebra.ldiv!(A, B)
 ldiv!(Y, A, B) = LinearAlgebra.ldiv!(Y, A, B)
