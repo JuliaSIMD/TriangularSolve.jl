@@ -522,4 +522,18 @@ function __init__()
   end
 end
 
+let
+  while true
+    A = rand(1, 1)
+    B = rand(1, 1)
+    res = similar(A)
+    rdiv!(res, A, UpperTriangular(B))
+    rdiv!(res, A, UnitUpperTriangular(B))
+
+    __init__()
+    ldiv!(res, LowerTriangular(B), A)
+    ldiv!(res, UnitLowerTriangular(B), A)
+    break
+  end
+end
 end
