@@ -18,7 +18,7 @@ IfElse = "0.1"
 LoopVectorization = "0.12.30"
 Polyester = "0.3"
 Static = "0.2, 0.3"
-VectorizationBase = "0.20"
+VectorizationBase = "0.20, 0.21"
 julia = "1.5"
 
 [extras]
