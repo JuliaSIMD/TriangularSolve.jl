@@ -1,7 +1,8 @@
 module TriangularSolve
 
+using LayoutPointers: stridedpointer_preserve, StrideIndex
 using VectorizationBase, LinearAlgebra #LoopVectorization
-using VectorizationBase: vfnmadd_fast, AbstractStridedPointer, AbstractMask, stridedpointer_preserve, zero_offsets, gesp, StridedPointer
+using VectorizationBase: vfnmadd_fast, AbstractStridedPointer, AbstractMask, zero_offsets, gesp, StridedPointer
 using CloseOpenIntervals: CloseOpen, SafeCloseOpen
 using Static
 using IfElse: ifelse
@@ -281,13 +282,14 @@ function rdiv_U!(spc::AbstractStridedPointer{T}, spa, spu, M, N, ::StaticInt{1},
 end
 
 const LDIVBUFFERS = Vector{UInt8}[]
-function lubuffer(::Val{T}, ::StaticInt{UF}, N) where {T, UF}
+@inline function lubuffer(::Val{T}, ::StaticInt{UF}, N) where {T, UF}
   buff = LDIVBUFFERS[Threads.threadid()]
   RSUF = StaticInt{UF}()*VectorizationBase.register_size()
   L = RSUF*N
   L > length(buff) && resize!(buff, L)
   ptr = Base.unsafe_convert(Ptr{T}, buff)
-  StridedPointer{T,2,1,0,(1,2)}(ptr, (VectorizationBase.static_sizeof(T), RSUF), (StaticInt(0),StaticInt(0)))
+  si = StrideIndex{2,(1,2),1}((VectorizationBase.static_sizeof(T), RSUF), (StaticInt(0),StaticInt(0)))
+  stridedpointer(ptr, si, StaticInt{0}())
 end
 function rdiv!(A::AbstractMatrix{T}, U::UpperTriangular{T}, ::Val{THREAD} = Val(true)) where {T<:Union{Float32,Float64},THREAD}
   div_dispatch!(A, A, parent(U), Val(false), Val(THREAD))
