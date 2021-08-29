@@ -291,6 +291,26 @@ const LDIVBUFFERS = Vector{UInt8}[]
   si = StrideIndex{2,(1,2),1}((VectorizationBase.static_sizeof(T), RSUF), (StaticInt(0),StaticInt(0)))
   stridedpointer(ptr, si, StaticInt{0}())
 end
+function div_dispatch!(C::AbstractMatrix{T}, A, U, ::Val{UNIT}, ::Val{THREAD}) where {UNIT,T,THREAD}
+  M, N = size(A)
+  ((N == 0) | (M == 0)) && return nothing
+  _spa, spap = stridedpointer_preserve(A)
+  _spc, spcp = stridedpointer_preserve(C)
+  _spu, spup = stridedpointer_preserve(U)
+  spa = zero_offsets(_spa)
+  spc = zero_offsets(_spc)
+  spu = zero_offsets(_spu)
+  GC.@preserve spap spcp spup begin
+    mtb = m_thread_block_size(M, N, Val(T))
+    if THREAD && (VectorizationBase.num_threads() > 1)
+      (M > mtb) && return multithread_rdiv!(spc, spa, spu, M, N, mtb, Val(UNIT), VectorizationBase.contiguous_axis(A))
+    elseif N > block_size(Val(T))
+      return rdiv_block_MandN!(spc, spa, spu, M, N, Val(UNIT), VectorizationBase.contiguous_axis(A))
+    end
+    return rdiv_U!(spc, spa, spu, M, N, VectorizationBase.contiguous_axis(A), Val(UNIT))
+  end
+end
+
 function rdiv!(A::AbstractMatrix{T}, U::UpperTriangular{T}, ::Val{THREAD} = Val(true)) where {T<:Union{Float32,Float64},THREAD}
   div_dispatch!(A, A, parent(U), Val(false), Val(THREAD))
   return A
@@ -398,6 +418,7 @@ function rdiv_block_MandN!(
     spc = gesp(spc, (B_m, StaticInt{0}()))
     m = mu
   end
+  nothing
 end
 function _nthreads()
   nc = VectorizationBase.num_cores()
@@ -432,6 +453,7 @@ function multithread_rdiv!(
       )
     end
   end
+  nothing
   # nlaunch = Md - (Mr == 0)
   # threads, torelease = Polyester.request_threads(Base.Threads.threadid(), nlaunch)
   # nthread = length(threads)
@@ -440,25 +462,6 @@ function multithread_rdiv!(
   # end
   # nbatch = nthread + one(nthread)
   
-end
-
-function div_dispatch!(C::AbstractMatrix{T}, A, U, ::Val{UNIT}, ::Val{THREAD}) where {UNIT,T,THREAD}
-  M, N = size(A)
-  ((N == 0) | (M == 0)) && return C
-  _spa, spap = stridedpointer_preserve(A)
-  _spc, spcp = stridedpointer_preserve(C)
-  _spu, spup = stridedpointer_preserve(U)
-  spa = zero_offsets(_spa)
-  spc = zero_offsets(_spc)
-  spu = zero_offsets(_spu)
-  GC.@preserve spap spcp spup begin
-    mtb = m_thread_block_size(M, N, Val(T))
-    (THREAD & (M > mtb)) && return multithread_rdiv!(spc, spa, spu, M, N, mtb, Val(UNIT), VectorizationBase.contiguous_axis(A))
-    if VectorizationBase.num_threads() == 1
-      N > block_size(Val(T)) && return rdiv_block_MandN!(spc, spa, spu, M, N, Val(UNIT), VectorizationBase.contiguous_axis(A))
-    end
-    rdiv_U!(spc, spa, spu, M, N, VectorizationBase.contiguous_axis(A), Val(UNIT))
-  end
 end
 
 # We're using `W x W` blocks, consuming `W` registers
@@ -524,18 +527,22 @@ function __init__()
   end
 end
 
-let
-  while true
-    A = rand(1, 1)
-    B = rand(1, 1)
-    res = similar(A)
-    rdiv!(res, A, UpperTriangular(B))
-    rdiv!(res, A, UnitUpperTriangular(B))
+# let
+#   while true
+#     A = rand(1, 1)
+#     B = rand(1, 1)
+#     res = similar(A)
+#     rdiv!(res, A, UpperTriangular(B))
+#     rdiv!(res, A, UnitUpperTriangular(B))
+#     rdiv!(res, A, UpperTriangular(B), Val(false))
+#     rdiv!(res, A, UnitUpperTriangular(B), Val(false))
 
-    __init__()
-    ldiv!(res, LowerTriangular(B), A)
-    ldiv!(res, UnitLowerTriangular(B), A)
-    break
-  end
-end
+#     __init__()
+#     ldiv!(res, LowerTriangular(B), A)
+#     ldiv!(res, UnitLowerTriangular(B), A)
+#     ldiv!(res, LowerTriangular(B), A, Val(false))
+#     ldiv!(res, UnitLowerTriangular(B), A, Val(false))
+#     break
+#   end
+# end
 end
