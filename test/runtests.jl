@@ -28,3 +28,7 @@ end
     test_solve(Float32)
   end
 end
+
+using Aqua
+Aqua.test_all(TriangularSolve)
+

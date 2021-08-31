@@ -139,14 +139,14 @@ end
 end
 @inline store_small_kern!(spa, ::Nothing, v, spu, i, n, ::Val{false}) = vstore!(spa, v / vload(spu, (n,n)), i)
 
-function BdivU_small_kern!(spa::AbstractStridedPointer{T}, sp, spb::AbstractStridedPointer{T}, spu::AbstractStridedPointer{T}, N, mask, ::Val{UNIT}) where {T,UNIT}
-  W = VectorizationBase.pick_vector_width(T)
+function BdivU_small_kern!(spa::AbstractStridedPointer{T}, sp, spb::AbstractStridedPointer{T}, spu::AbstractStridedPointer{T}, N, mask::AbstractMask{W}, ::Val{UNIT}) where {T,UNIT,W}
+  # W = VectorizationBase.pick_vector_width(T)
   for n ∈ CloseOpen(N)
-    Amn = vload(spb, (MM(W, StaticInt(0)),n), mask)
+    Amn = vload(spb, (MM{W}(StaticInt(0)),n), mask)
     for k ∈ SafeCloseOpen(n)
-      Amn = vfnmadd_fast(vload(spa, (MM(W, StaticInt(0)),k), mask), vload(spu, (k,n)), Amn)
+      Amn = vfnmadd_fast(vload(spa, (MM{W}(StaticInt(0)),k), mask), vload(spu, (k,n)), Amn)
     end
-    store_small_kern!(spa, sp, Amn, spu, (MM(W, StaticInt(0)),n), n, mask, Val{UNIT}())
+    store_small_kern!(spa, sp, Amn, spu, (MM{W}(StaticInt(0)),n), n, mask, Val{UNIT}())
   end
 end
 function BdivU_small_kern_u!(spa::AbstractStridedPointer{T}, sp, spb::AbstractStridedPointer{T}, spu::AbstractStridedPointer{T}, N, ::StaticInt{U}, ::Val{UNIT}) where {T,U,UNIT}
@@ -240,7 +240,7 @@ end
   end
 end
 
-function rdiv_U!(spc::AbstractStridedPointer{T}, spa, spu, M, N, ::StaticInt{1}, ::Val{UNIT}) where {T,UNIT}
+function rdiv_U!(spc::AbstractStridedPointer{T}, spa::AbstractStridedPointer, spu::AbstractStridedPointer, M, N, ::StaticInt{1}, ::Val{UNIT}) where {T,UNIT}
   WS = pick_vector_width(T)
   W = Int(WS)
   UF = unroll_factor(WS)
@@ -291,8 +291,12 @@ const LDIVBUFFERS = Vector{UInt8}[]
   si = StrideIndex{2,(1,2),1}((VectorizationBase.static_sizeof(T), RSUF), (StaticInt(0),StaticInt(0)))
   stridedpointer(ptr, si, StaticInt{0}())
 end
+_canonicalize(x) = signed(x)
+_canonicalize(::StaticInt{N}) where {N} = StaticInt{N}()
 function div_dispatch!(C::AbstractMatrix{T}, A, U, ::Val{UNIT}, ::Val{THREAD}) where {UNIT,T,THREAD}
-  M, N = size(A)
+  _M, _N = size(A)
+  M = _canonicalize(_M)
+  N = _canonicalize(_N)
   ((N == 0) | (M == 0)) && return nothing
   _spa, spap = stridedpointer_preserve(A)
   _spc, spcp = stridedpointer_preserve(C)
@@ -475,7 +479,7 @@ function unroll_factor(::StaticInt{W}) where {W}
   ifelse(Static.lt(num_blocks, StaticInt{1}()), StaticInt{1}(), num_blocks)
 end
 
-function rdiv_U!(spc::AbstractStridedPointer{T}, spa, spu, M, N, ::StaticInt, ::Val{UNIT}) where {T,UNIT}
+function rdiv_U!(spc::AbstractStridedPointer{T}, spa::AbstractStridedPointer, spu::AbstractStridedPointer, M, N, ::StaticInt{var"#UNUSED#"}, ::Val{UNIT}) where {T,UNIT,var"#UNUSED#"}
   WS = pick_vector_width(T)
   W = Int(WS)
   UF = unroll_factor(WS)
