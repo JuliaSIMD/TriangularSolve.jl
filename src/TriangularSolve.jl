@@ -139,7 +139,7 @@ end
 end
 @inline store_small_kern!(spa, ::Nothing, v, spu, i, n, ::Val{false}) = vstore!(spa, v / vload(spu, (n,n)), i)
 
-function BdivU_small_kern!(spa::AbstractStridedPointer{T}, sp, spb::AbstractStridedPointer{T}, spu::AbstractStridedPointer{T}, N, mask::AbstractMask{W}, ::Val{UNIT}) where {T,UNIT,W}
+@inline function BdivU_small_kern!(spa::AbstractStridedPointer{T}, sp, spb::AbstractStridedPointer{T}, spu::AbstractStridedPointer{T}, N, mask::AbstractMask{W}, ::Val{UNIT}) where {T,UNIT,W}
   # W = VectorizationBase.pick_vector_width(T)
   for n ∈ CloseOpen(N)
     Amn = vload(spb, (MM{W}(StaticInt(0)),n), mask)
@@ -149,7 +149,7 @@ function BdivU_small_kern!(spa::AbstractStridedPointer{T}, sp, spb::AbstractStri
     store_small_kern!(spa, sp, Amn, spu, (MM{W}(StaticInt(0)),n), n, mask, Val{UNIT}())
   end
 end
-function BdivU_small_kern_u!(spa::AbstractStridedPointer{T}, sp, spb::AbstractStridedPointer{T}, spu::AbstractStridedPointer{T}, N, ::StaticInt{U}, ::Val{UNIT}) where {T,U,UNIT}
+@inline function BdivU_small_kern_u!(spa::AbstractStridedPointer{T}, sp, spb::AbstractStridedPointer{T}, spu::AbstractStridedPointer{T}, N, ::StaticInt{U}, ::Val{UNIT}) where {T,U,UNIT}
   W = Int(VectorizationBase.pick_vector_width(T))
   for n ∈ CloseOpen(N)
     Amn = vload(spb, Unroll{1,W,U,1,W,0x0000000000000000,1}((StaticInt(0),n)))
@@ -203,7 +203,7 @@ end
 
 @generated function rdiv_solve_W_u!(spc, spb, spa, spu, n, ::StaticInt{W}, ::StaticInt{U}, ::Val{UNIT}) where {W, U, UNIT}
   quote
-    # $(Expr(:meta,:inline))
+    $(Expr(:meta,:inline))
     # here, we just want to load the vectors
     C11 = VectorizationBase.data(vload(spa, Unroll{2,1,$W,1,$W,0x0000000000000000,1}(Unroll{1,$W,$U,1,$W,0x0000000000000000,1}((StaticInt(0),n)))))
     Base.Cartesian.@nexprs $W c -> C11_c = C11[c]
@@ -224,7 +224,7 @@ end
     :(vstore!(spc, C11, i, mask))
   end
   quote
-    # $(Expr(:meta,:inline))
+    $(Expr(:meta,:inline))
     # here, we just want to load the vectors
     C11 = VectorizationBase.data(vload(spa, Unroll{2,1,$W,1,$W,0xffffffffffffffff,1}((StaticInt(0),n)), mask))
     Base.Cartesian.@nexprs $W c -> C11_c = C11[c]
@@ -240,7 +240,7 @@ end
   end
 end
 
-function rdiv_U!(spc::AbstractStridedPointer{T}, spa::AbstractStridedPointer, spu::AbstractStridedPointer, M, N, ::StaticInt{1}, ::Val{UNIT}) where {T,UNIT}
+@inline function rdiv_U!(spc::AbstractStridedPointer{T}, spa::AbstractStridedPointer, spu::AbstractStridedPointer, M, N, ::StaticInt{1}, ::Val{UNIT}) where {T,UNIT}
   WS = pick_vector_width(T)
   W = Int(WS)
   UF = unroll_factor(WS)
@@ -381,7 +381,6 @@ function rdiv_block_N!(
     # println("Solve with N_temp = $N_temp and n = $n")
     rdiv_U!(spc, spa_rdiv, gesp(spu, (n,StaticInt{0}())), M, N_temp, StaticInt{X}(), Val(UNIT))
     repeat || break
-    
     spa = gesp(spa, (StaticInt(0), B_normalized))
     spc = gesp(spc, (StaticInt(0), B_normalized))
     spu = gesp(spu, (StaticInt(0), B_normalized))
@@ -439,20 +438,21 @@ end
 function multithread_rdiv!(
   spc::AbstractStridedPointer{T}, spa, spu, M, N, mtb, ::Val{UNIT}, ::StaticInt{X}
 ) where {X,T,UNIT}
+  mtb = 8
   (Md, Mr) = VectorizationBase.vdivrem(M, mtb)
   Nblock = Md + (Mr ≠ 0)
   Mrem = Core.ifelse(Mr ≠ 0, Mr, mtb)
   # @show mtb, Nblock, Mrem, Md, Mr
   # return
-  let (Md, Mr) = VectorizationBase.vdivrem(M, mtb), Nblock = Md + (Mr ≠ 0), Mrem = Core.ifelse(Mr ≠ 0, Mr, mtb)
+  let Md = Md, Mr = Mr, Nblock = Md + (Mr ≠ 0), Mrem = Core.ifelse(Mr ≠ 0, Mr, mtb), VUNIT = Val{UNIT}(), StaticX = StaticInt{X}()
     @batch for block in CloseOpen(Nblock)
-    # let block = 0
-      Mtemp = Core.ifelse(block == Nblock-1, Mrem, mtb)
+      # for block in CloseOpen(Nblock)
+      # let block = 0
       rdiv_block_MandN!(
-      # rdiv_block_N!(
+        # rdiv_block_N!(
         gesp(spc, (mtb*block, StaticInt{0}())),
         gesp(spa, (mtb*block, StaticInt{0}())),
-        spu, Mtemp, N, Val{UNIT}(), StaticInt{X}()
+        spu, Core.ifelse(block == Nblock-1, Mrem, mtb), N, VUNIT, StaticX
         # spu, M, N, Val{UNIT}(), StaticInt{X}()
       )
     end
