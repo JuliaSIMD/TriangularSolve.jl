@@ -73,15 +73,15 @@ end
 # @inline function solve_Wx3W!(ap::AbstractStridedPointer{T}, bp::AbstractStridedPointer{T}, U, rowoffset, coloffset) where {T}
 #   WS = VectorizationBase.pick_vector_width(T)
 #   W = Int(WS)  
-#   A11 = vload(bp, Unroll{2,1,W,1,W,0x0000000000000000,1}((rowoffset,coloffset)))
-#   A12 = vload(bp, Unroll{2,1,W,1,W,0x0000000000000000,1}((rowoffset,coloffset+WS)))
-#   A13 = vload(bp, Unroll{2,1,W,1,W,0x0000000000000000,1}((rowoffset,coloffset+WS+WS)))
+#   A11 = vload(bp, Unroll{2,1,W,1,W,zero(UInt),1}((rowoffset,coloffset)))
+#   A12 = vload(bp, Unroll{2,1,W,1,W,zero(UInt),1}((rowoffset,coloffset+WS)))
+#   A13 = vload(bp, Unroll{2,1,W,1,W,zero(UInt),1}((rowoffset,coloffset+WS+WS)))
 
 #   A11, A12, A13 = solve_Wx3W(A11, A12, A13, U, WS)
   
-#   vstore!(ap, A11, Unroll{2,1,W,1,W,0x0000000000000000,1}((rowoffset,coloffset)))
-#   vstore!(ap, A12, Unroll{2,1,W,1,W,0x0000000000000000,1}((rowoffset,coloffset+WS)))
-#   vstore!(ap, A13, Unroll{2,1,W,1,W,0x0000000000000000,1}((rowoffset,coloffset+WS+WS)))
+#   vstore!(ap, A11, Unroll{2,1,W,1,W,zero(UInt),1}((rowoffset,coloffset)))
+#   vstore!(ap, A12, Unroll{2,1,W,1,W,zero(UInt),1}((rowoffset,coloffset+WS)))
+#   vstore!(ap, A13, Unroll{2,1,W,1,W,zero(UInt),1}((rowoffset,coloffset+WS+WS)))
 # end
 # @inline function solve_Wx3W!(ap::AbstractStridedPointer{T}, bp::AbstractStridedPointer{T}, U, rowoffset, coloffset, m::VectorizationBase.AbstractMask) where {T}
 #   WS = VectorizationBase.pick_vector_width(T)
@@ -152,12 +152,12 @@ end
 @inline function BdivU_small_kern_u!(spa::AbstractStridedPointer{T}, sp, spb::AbstractStridedPointer{T}, spu::AbstractStridedPointer{T}, N, ::StaticInt{U}, ::Val{UNIT}) where {T,U,UNIT}
   W = Int(VectorizationBase.pick_vector_width(T))
   for n ∈ CloseOpen(N)
-    Amn = vload(spb, Unroll{1,W,U,1,W,0x0000000000000000,1}((StaticInt(0),n)))
+    Amn = vload(spb, Unroll{1,W,U,1,W,zero(UInt),1}((StaticInt(0),n)))
     for k ∈ SafeCloseOpen(n)
-      Amk = vload(spa, Unroll{1,W,U,1,W,0x0000000000000000,1}((StaticInt(0),k)))
+      Amk = vload(spa, Unroll{1,W,U,1,W,zero(UInt),1}((StaticInt(0),k)))
       Amn = vfnmadd_fast(Amk, vload(spu, (k,n)), Amn)
     end
-    store_small_kern!(spa, sp, Amn, spu, Unroll{1,W,U,1,W,0x0000000000000000,1}((StaticInt(0),n)), n, Val{UNIT}())
+    store_small_kern!(spa, sp, Amn, spu, Unroll{1,W,U,1,W,zero(UInt),1}((StaticInt(0),n)), n, Val{UNIT}())
   end
 end
 # function BdivU_small!(A::AbstractMatrix{T}, B::AbstractMatrix{T}, U::AbstractMatrix{T}) where {T}
@@ -205,14 +205,14 @@ end
   quote
     $(Expr(:meta,:inline))
     # here, we just want to load the vectors
-    C11 = VectorizationBase.data(vload(spa, Unroll{2,1,$W,1,$W,0x0000000000000000,1}(Unroll{1,$W,$U,1,$W,0x0000000000000000,1}((StaticInt(0),n)))))
+    C11 = VectorizationBase.data(vload(spa, Unroll{2,1,$W,1,$W,zero(UInt),1}(Unroll{1,$W,$U,1,$W,zero(UInt),1}((StaticInt(0),n)))))
     Base.Cartesian.@nexprs $W c -> C11_c = C11[c]
     for nk ∈ SafeCloseOpen(n) # nmuladd
-      A11 = vload(spc, Unroll{1,$W,$U,1,$W,0x0000000000000000,1}((StaticInt(0),nk)))
+      A11 = vload(spc, Unroll{1,$W,$U,1,$W,zero(UInt),1}((StaticInt(0),nk)))
       Base.Cartesian.@nexprs $W c -> C11_c = vfnmadd_fast(A11, vload(spu, (nk,n+(c-1))), C11_c)
     end
     C11vu = solve_AU(VecUnroll((Base.Cartesian.@ntuple $W C11)), spu, n, Val{$UNIT}())
-    i = Unroll{2,1,$W,1,$W,0x0000000000000000,1}(Unroll{1,$W,$U,1,$W,0x0000000000000000,1}((StaticInt(0),n)))
+    i = Unroll{2,1,$W,1,$W,zero(UInt),1}(Unroll{1,$W,$U,1,$W,zero(UInt),1}((StaticInt(0),n)))
     vstore!(spc, C11vu, i)
     maybestore!(spb, C11vu, i)
   end
