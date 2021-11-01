@@ -86,15 +86,15 @@ end
 # @inline function solve_Wx3W!(ap::AbstractStridedPointer{T}, bp::AbstractStridedPointer{T}, U, rowoffset, coloffset, m::VectorizationBase.AbstractMask) where {T}
 #   WS = VectorizationBase.pick_vector_width(T)
 #   W = Int(WS)
-#   A11 = vload(bp, Unroll{2,1,W,1,W,0xffffffffffffffff,1}((rowoffset,coloffset)), m)
-#   A12 = vload(bp, Unroll{2,1,W,1,W,0xffffffffffffffff,1}((rowoffset,coloffset+WS)), m)
-#   A13 = vload(bp, Unroll{2,1,W,1,W,0xffffffffffffffff,1}((rowoffset,coloffset+WS+WS)), m)
+#   A11 = vload(bp, Unroll{2,1,W,1,W,(-1%UInt),1}((rowoffset,coloffset)), m)
+#   A12 = vload(bp, Unroll{2,1,W,1,W,(-1%UInt),1}((rowoffset,coloffset+WS)), m)
+#   A13 = vload(bp, Unroll{2,1,W,1,W,(-1%UInt),1}((rowoffset,coloffset+WS+WS)), m)
 
 #   A11, A12, A13 = solve_Wx3W(A11, A12, A13, U, WS)
 
-#   vstore!(ap, A11, Unroll{2,1,W,1,W,0xffffffffffffffff,1}((rowoffset,coloffset)), m)
-#   vstore!(ap, A12, Unroll{2,1,W,1,W,0xffffffffffffffff,1}((rowoffset,coloffset+WS)), m)
-#   vstore!(ap, A13, Unroll{2,1,W,1,W,0xffffffffffffffff,1}((rowoffset,coloffset+WS+WS)), m)
+#   vstore!(ap, A11, Unroll{2,1,W,1,W,(-1%UInt),1}((rowoffset,coloffset)), m)
+#   vstore!(ap, A12, Unroll{2,1,W,1,W,(-1%UInt),1}((rowoffset,coloffset+WS)), m)
+#   vstore!(ap, A13, Unroll{2,1,W,1,W,(-1%UInt),1}((rowoffset,coloffset+WS+WS)), m)
 # end
 
 # solve_3Wx3W!(A,B,U::UpperTriangular) = solve_3Wx3W!(A,B,parent(U))
@@ -226,7 +226,7 @@ end
   quote
     $(Expr(:meta,:inline))
     # here, we just want to load the vectors
-    C11 = VectorizationBase.data(vload(spa, Unroll{2,1,$W,1,$W,0xffffffffffffffff,1}((StaticInt(0),n)), mask))
+    C11 = VectorizationBase.data(vload(spa, Unroll{2,1,$W,1,$W,(-1%UInt),1}((StaticInt(0),n)), mask))
     Base.Cartesian.@nexprs $W c -> C11_c = C11[c]
     for nk ∈ SafeCloseOpen(n) # nmuladd
       A11 = vload(spc, (MM{$W}(StaticInt(0)),nk), mask)
@@ -234,7 +234,7 @@ end
     end
     C11 = VecUnroll((Base.Cartesian.@ntuple $W C11))
     C11 = solve_AU(C11, spu, n, Val{$UNIT}())
-    i = Unroll{2,1,$W,1,$W,0xffffffffffffffff,1}((StaticInt(0),n))
+    i = Unroll{2,1,$W,1,$W,(-1%UInt),1}((StaticInt(0),n))
     $storecexpr
     maybestore!(spb, C11, i, mask)
   end
