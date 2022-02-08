@@ -531,22 +531,24 @@ function __init__()
   end
 end
 
-# let
-#   while true
-#     A = rand(1, 1)
-#     B = rand(1, 1)
-#     res = similar(A)
-#     rdiv!(res, A, UpperTriangular(B))
-#     rdiv!(res, A, UnitUpperTriangular(B))
-#     rdiv!(res, A, UpperTriangular(B), Val(false))
-#     rdiv!(res, A, UnitUpperTriangular(B), Val(false))
+@static if VERSION >= v"1.8"
+  let
+    while true
+      A = rand(1, 1)
+      B = rand(1, 1)
+      res = similar(A)
+      rdiv!(res, A, UpperTriangular(B))
+      rdiv!(res, A, UnitUpperTriangular(B))
+      rdiv!(res, A, UpperTriangular(B), Val(false))
+      rdiv!(res, A, UnitUpperTriangular(B), Val(false))
 
-#     __init__()
-#     ldiv!(res, LowerTriangular(B), A)
-#     ldiv!(res, UnitLowerTriangular(B), A)
-#     ldiv!(res, LowerTriangular(B), A, Val(false))
-#     ldiv!(res, UnitLowerTriangular(B), A, Val(false))
-#     break
-#   end
-# end
+      __init__()
+      ldiv!(res, LowerTriangular(B), A)
+      ldiv!(res, UnitLowerTriangular(B), A)
+      ldiv!(res, LowerTriangular(B), A, Val(false))
+      ldiv!(res, UnitLowerTriangular(B), A, Val(false))
+      break
+    end
+  end
+end
 end
