@@ -531,7 +531,7 @@ function __init__()
   end
 end
 
-@static if VERSION >= v"1.8.0-DEV.1442"
+@static if VERSION >= v"1.8.0-beta1"
   let
     while true
       A = rand(1, 1)

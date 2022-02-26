@@ -70,7 +70,7 @@ BenchmarkTools.Trial: 10000 samples with 1 evaluation.
 ```
 Multithreaded benchmarks:
 ```julia
-julia> BLAS.set_num_threads(TriangularSolve.VectorizationBase.num_cores())
+julia> BLAS.set_num_threads(min(Threads.nthreads(), TriangularSolve.VectorizationBase.num_cores()))
 
 julia> @benchmark TriangularSolve.rdiv!($C, $A, UpperTriangular($B))
 BenchmarkTools.Trial: 10000 samples with 3 evaluations.
