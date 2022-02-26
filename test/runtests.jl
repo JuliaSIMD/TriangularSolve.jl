@@ -30,5 +30,6 @@ end
 end
 
 using Aqua
-Aqua.test_all(TriangularSolve)
+Aqua.test_all(TriangularSolve, ambiguities=false)
+@test isempty(Test.detect_ambiguities(TriangularSolve))
 
