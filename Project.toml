@@ -1,7 +1,7 @@
 name = "TriangularSolve"
 uuid = "d5829a12-d9aa-46ab-831f-fb7c9ab06edf"
 authors = ["chriselrod <elrodc@gmail.com> and contributors"]
-version = "0.1.10"
+version = "0.1.11"
 
 [deps]
 CloseOpenIntervals = "fb6a15b2-703c-40df-9091-08a04967cfa9"
