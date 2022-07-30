@@ -531,12 +531,13 @@ function __init__()
   end
 end
 
+using SnoopPrecompile
 @static if VERSION >= v"1.8.0-beta1"
-  let
-    while true
-      A = rand(1, 1)
-      B = rand(1, 1)
-      res = similar(A)
+  @precompile_setup begin
+    A = rand(1, 1)
+    B = rand(1, 1)
+    res = similar(A)
+    @precompile_all_calls begin
       rdiv!(res, A, UpperTriangular(B))
       rdiv!(res, A, UnitUpperTriangular(B))
       rdiv!(res, A, UpperTriangular(B), Val(false))
@@ -547,7 +548,6 @@ end
       ldiv!(res, UnitLowerTriangular(B), A)
       ldiv!(res, LowerTriangular(B), A, Val(false))
       ldiv!(res, UnitLowerTriangular(B), A, Val(false))
-      break
     end
   end
 end

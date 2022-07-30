@@ -1,7 +1,7 @@
 name = "TriangularSolve"
 uuid = "d5829a12-d9aa-46ab-831f-fb7c9ab06edf"
 authors = ["chriselrod <elrodc@gmail.com> and contributors"]
-version = "0.1.12"
+version = "0.1.13"
 
 [deps]
 CloseOpenIntervals = "fb6a15b2-703c-40df-9091-08a04967cfa9"
@@ -10,6 +10,7 @@ LayoutPointers = "10f19ff3-798f-405d-979b-55457f8fc047"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 LoopVectorization = "bdcacae8-1622-11e9-2a5c-532679323890"
 Polyester = "f517fe37-dbe3-4b94-8317-1923a5111588"
+SnoopPrecompile = "66db9d55-30c0-4569-8b51-7e840670fc0c"
 Static = "aedffcd0-7271-4cad-89d0-dc628f76c6d3"
 VectorizationBase = "3d5dd08c-fd9d-11e8-17fa-ed2836048c2f"
 
@@ -19,6 +20,7 @@ IfElse = "0.1"
 LayoutPointers = "0.1.2"
 LoopVectorization = "0.12.30"
 Polyester = "0.4, 0.5, 0.6"
+SnoopPrecompile = "1"
 Static = "0.2, 0.3, 0.4, 0.6, 0.7"
 VectorizationBase = "0.21"
 julia = "1.5"
