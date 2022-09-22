@@ -315,42 +315,42 @@ function div_dispatch!(C::AbstractMatrix{T}, A, U, ::Val{UNIT}, ::Val{THREAD}) w
   end
 end
 
-function rdiv!(A::AbstractMatrix{T}, U::UpperTriangular{T}, ::Val{THREAD} = Val(true)) where {T<:Union{Float32,Float64},THREAD}
+function rdiv!(A::AbstractMatrix{T}, U::UpperTriangular{T}, ::Val{THREAD} = Val(false)) where {T<:Union{Float32,Float64},THREAD}
   div_dispatch!(A, A, parent(U), Val(false), Val(THREAD))
   return A
 end
-function rdiv!(C::AbstractMatrix{T}, A::AbstractMatrix{T}, U::UpperTriangular{T}, ::Val{THREAD} = Val(true)) where {T<:Union{Float32,Float64},THREAD}
+function rdiv!(C::AbstractMatrix{T}, A::AbstractMatrix{T}, U::UpperTriangular{T}, ::Val{THREAD} = Val(false)) where {T<:Union{Float32,Float64},THREAD}
   div_dispatch!(C, A, parent(U), Val(false), Val(THREAD))
   return C
 end
-function rdiv!(A::AbstractMatrix{T}, U::UnitUpperTriangular{T}, ::Val{THREAD} = Val(true)) where {T<:Union{Float32,Float64},THREAD}
+function rdiv!(A::AbstractMatrix{T}, U::UnitUpperTriangular{T}, ::Val{THREAD} = Val(false)) where {T<:Union{Float32,Float64},THREAD}
   div_dispatch!(A, A, parent(U), Val(true), Val(THREAD))
   return A
 end
-function rdiv!(C::AbstractMatrix{T}, A::AbstractMatrix{T}, U::UnitUpperTriangular{T}, ::Val{THREAD} = Val(true)) where {T<:Union{Float32,Float64},THREAD}
+function rdiv!(C::AbstractMatrix{T}, A::AbstractMatrix{T}, U::UnitUpperTriangular{T}, ::Val{THREAD} = Val(false)) where {T<:Union{Float32,Float64},THREAD}
   div_dispatch!(C, A, parent(U), Val(true), Val(THREAD))
   return C
 end
-function ldiv!(U::LowerTriangular{T}, A::AbstractMatrix{T}, ::Val{THREAD} = Val(true)) where {T<:Union{Float32,Float64},THREAD}
+function ldiv!(U::LowerTriangular{T}, A::AbstractMatrix{T}, ::Val{THREAD} = Val(false)) where {T<:Union{Float32,Float64},THREAD}
   div_dispatch!(transpose(A), transpose(A), transpose(parent(U)), Val(false), Val(THREAD))
   return A
 end
-function ldiv!(C::AbstractMatrix{T}, U::LowerTriangular{T}, A::AbstractMatrix{T}, ::Val{THREAD} = Val(true)) where {T<:Union{Float32,Float64},THREAD}
+function ldiv!(C::AbstractMatrix{T}, U::LowerTriangular{T}, A::AbstractMatrix{T}, ::Val{THREAD} = Val(false)) where {T<:Union{Float32,Float64},THREAD}
   div_dispatch!(transpose(C), transpose(A), transpose(parent(U)), Val(false), Val(THREAD))
   return C
 end
-function ldiv!(U::UnitLowerTriangular{T}, A::AbstractMatrix{T}, ::Val{THREAD} = Val(true)) where {T<:Union{Float32,Float64},THREAD}
+function ldiv!(U::UnitLowerTriangular{T}, A::AbstractMatrix{T}, ::Val{THREAD} = Val(false)) where {T<:Union{Float32,Float64},THREAD}
   div_dispatch!(transpose(A), transpose(A), transpose(parent(U)), Val(true), Val(THREAD))
   return A
 end
-function ldiv!(C::AbstractMatrix{T}, U::UnitLowerTriangular{T}, A::AbstractMatrix{T}, ::Val{THREAD} = Val(true)) where {T<:Union{Float32,Float64},THREAD}
+function ldiv!(C::AbstractMatrix{T}, U::UnitLowerTriangular{T}, A::AbstractMatrix{T}, ::Val{THREAD} = Val(false)) where {T<:Union{Float32,Float64},THREAD}
   div_dispatch!(transpose(C), transpose(A), transpose(parent(U)), Val(true), Val(THREAD))
   return C
 end
 
-ldiv!(A, B, ::Val = Val(true)) = LinearAlgebra.ldiv!(A, B)
-ldiv!(Y, A, B, ::Val = Val(true)) = LinearAlgebra.ldiv!(Y, A, B)
-rdiv!(A, B, ::Val = Val(true)) = LinearAlgebra.rdiv!(A, B)
+ldiv!(A, B, ::Val = Val(false)) = LinearAlgebra.ldiv!(A, B)
+ldiv!(Y, A, B, ::Val = Val(false)) = LinearAlgebra.ldiv!(Y, A, B)
+rdiv!(A, B, ::Val = Val(false)) = LinearAlgebra.rdiv!(A, B)
 
 function block_size(::Val{T}) where {T}
   elements_l2 = (VectorizationBase.cache_size(StaticInt(2))*StaticInt(19)) ÷ (VectorizationBase.static_sizeof(T)*StaticInt(60))
@@ -540,14 +540,14 @@ using SnoopPrecompile
     @precompile_all_calls begin
       rdiv!(res, A, UpperTriangular(B))
       rdiv!(res, A, UnitUpperTriangular(B))
-      rdiv!(res, A, UpperTriangular(B), Val(false))
-      rdiv!(res, A, UnitUpperTriangular(B), Val(false))
+      # rdiv!(res, A, UpperTriangular(B), Val(true))
+      # rdiv!(res, A, UnitUpperTriangular(B), Val(true))
 
       __init__()
       ldiv!(res, LowerTriangular(B), A)
       ldiv!(res, UnitLowerTriangular(B), A)
-      ldiv!(res, LowerTriangular(B), A, Val(false))
-      ldiv!(res, UnitLowerTriangular(B), A, Val(false))
+      # ldiv!(res, LowerTriangular(B), A, Val(true))
+      # ldiv!(res, UnitLowerTriangular(B), A, Val(true))
     end
   end
 end

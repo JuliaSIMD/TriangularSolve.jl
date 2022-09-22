@@ -72,7 +72,7 @@ Multithreaded benchmarks:
 ```julia
 julia> BLAS.set_num_threads(min(Threads.nthreads(), TriangularSolve.VectorizationBase.num_cores()))
 
-julia> @benchmark TriangularSolve.rdiv!($C, $A, UpperTriangular($B))
+julia> @benchmark TriangularSolve.rdiv!($C, $A, UpperTriangular($B), Val(true))
 BenchmarkTools.Trial: 10000 samples with 3 evaluations.
  Range (min … max):  8.309 μs …  24.357 μs  ┊ GC (min … max): 0.00% … 0.00%
  Time  (median):     8.769 μs               ┊ GC (median):    0.00%
@@ -96,7 +96,7 @@ BenchmarkTools.Trial: 10000 samples with 1 evaluation.
 
  Memory estimate: 0 bytes, allocs estimate: 0.
 
-julia> @benchmark TriangularSolve.ldiv!($C, LowerTriangular($B), $A)
+julia> @benchmark TriangularSolve.ldiv!($C, LowerTriangular($B), $A, Val(true))
 BenchmarkTools.Trial: 10000 samples with 5 evaluations.
  Range (min … max):  7.903 μs …  22.442 μs  ┊ GC (min … max): 0.00% … 0.00%
  Time  (median):     9.871 μs               ┊ GC (median):    0.00%
@@ -150,10 +150,10 @@ A = rand(N,N); B = rand(N,N); C = similar(A);
 @benchmark ldiv!($C, LowerTriangular($B), $A)
 
 BLAS.set_num_threads(TriangularSolve.VectorizationBase.num_cores())
-@benchmark TriangularSolve.rdiv!($C, $A, UpperTriangular($B))
+@benchmark TriangularSolve.rdiv!($C, $A, UpperTriangular($B), Val(true))
 @benchmark rdiv!(copyto!($C, $A), UpperTriangular($B))
 
-@benchmark TriangularSolve.ldiv!($C, LowerTriangular($B), $A)
+@benchmark TriangularSolve.ldiv!($C, LowerTriangular($B), $A, Val(true))
 @benchmark ldiv!($C, LowerTriangular($B), $A)
 
 versioninfo()
