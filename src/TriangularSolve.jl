@@ -293,7 +293,7 @@ const LDIVBUFFERS = Vector{UInt8}[]
 end
 _canonicalize(x) = signed(x)
 _canonicalize(::StaticInt{N}) where {N} = StaticInt{N}()
-function div_dispatch!(C::AbstractMatrix{T}, A, U, ::Val{UNIT}, ::Val{THREAD}) where {UNIT,T,THREAD}
+function div_dispatch!(C::AbstractMatrix{T}, A, U, nthread, ::Val{UNIT}) where {UNIT,T}
   _M, _N = size(A)
   M = _canonicalize(_M)
   N = _canonicalize(_N)
@@ -305,8 +305,8 @@ function div_dispatch!(C::AbstractMatrix{T}, A, U, ::Val{UNIT}, ::Val{THREAD}) w
   spc = zero_offsets(_spc)
   spu = zero_offsets(_spu)
   GC.@preserve spap spcp spup begin
-    mtb = m_thread_block_size(M, N, Val(T))
-    if THREAD && (VectorizationBase.num_threads() > 1)
+    mtb = m_thread_block_size(M, N, nthread, Val(T))
+    if nthread > 1
       (M > mtb) && return multithread_rdiv!(spc, spa, spu, M, N, mtb, Val(UNIT), VectorizationBase.contiguous_axis(A))
     elseif N > block_size(Val(T))
       return rdiv_block_MandN!(spc, spa, spu, M, N, Val(UNIT), VectorizationBase.contiguous_axis(A))
@@ -315,36 +315,69 @@ function div_dispatch!(C::AbstractMatrix{T}, A, U, ::Val{UNIT}, ::Val{THREAD}) w
   end
 end
 
-function rdiv!(A::AbstractMatrix{T}, U::UpperTriangular{T}, ::Val{THREAD} = Val(true)) where {T<:Union{Float32,Float64},THREAD}
-  div_dispatch!(A, A, parent(U), Val(false), Val(THREAD))
+_nthreads() = min(Int(VectorizationBase.num_cores())::Int, Threads.nthreads()::Int)
+function rdiv!(A::AbstractMatrix{T}, U::UpperTriangular{T}, ::Val{true} = Val(true)) where {T<:Union{Float32,Float64}}
+  div_dispatch!(A, A, parent(U), _nthreads(), Val(false))
   return A
 end
-function rdiv!(C::AbstractMatrix{T}, A::AbstractMatrix{T}, U::UpperTriangular{T}, ::Val{THREAD} = Val(true)) where {T<:Union{Float32,Float64},THREAD}
-  div_dispatch!(C, A, parent(U), Val(false), Val(THREAD))
+function rdiv!(A::AbstractMatrix{T}, U::UpperTriangular{T}, ::Val{false}) where {T<:Union{Float32,Float64}}
+  div_dispatch!(A, A, parent(U), static(0), Val(false))
+  return A
+end
+function rdiv!(C::AbstractMatrix{T}, A::AbstractMatrix{T}, U::UpperTriangular{T}, ::Val{true} = Val(true)) where {T<:Union{Float32,Float64}}
+  div_dispatch!(C, A, parent(U), _nthreads(), Val(false))
   return C
 end
-function rdiv!(A::AbstractMatrix{T}, U::UnitUpperTriangular{T}, ::Val{THREAD} = Val(true)) where {T<:Union{Float32,Float64},THREAD}
-  div_dispatch!(A, A, parent(U), Val(true), Val(THREAD))
-  return A
-end
-function rdiv!(C::AbstractMatrix{T}, A::AbstractMatrix{T}, U::UnitUpperTriangular{T}, ::Val{THREAD} = Val(true)) where {T<:Union{Float32,Float64},THREAD}
-  div_dispatch!(C, A, parent(U), Val(true), Val(THREAD))
+function rdiv!(C::AbstractMatrix{T}, A::AbstractMatrix{T}, U::UpperTriangular{T}, ::Val{false}) where {T<:Union{Float32,Float64}}
+  div_dispatch!(C, A, parent(U), static(0), Val(false))
   return C
 end
-function ldiv!(U::LowerTriangular{T}, A::AbstractMatrix{T}, ::Val{THREAD} = Val(true)) where {T<:Union{Float32,Float64},THREAD}
-  div_dispatch!(transpose(A), transpose(A), transpose(parent(U)), Val(false), Val(THREAD))
+function rdiv!(A::AbstractMatrix{T}, U::UnitUpperTriangular{T}, ::Val{true} = Val(true)) where {T<:Union{Float32,Float64}}
+  div_dispatch!(A, A, parent(U), _nthreads(), Val(true))
   return A
 end
-function ldiv!(C::AbstractMatrix{T}, U::LowerTriangular{T}, A::AbstractMatrix{T}, ::Val{THREAD} = Val(true)) where {T<:Union{Float32,Float64},THREAD}
-  div_dispatch!(transpose(C), transpose(A), transpose(parent(U)), Val(false), Val(THREAD))
+function rdiv!(A::AbstractMatrix{T}, U::UnitUpperTriangular{T}, ::Val{false}) where {T<:Union{Float32,Float64}}
+  div_dispatch!(A, A, parent(U), static(0), Val(true))
+  return A
+end
+function rdiv!(C::AbstractMatrix{T}, A::AbstractMatrix{T}, U::UnitUpperTriangular{T}, ::Val{true} = Val(true)) where {T<:Union{Float32,Float64}}
+  div_dispatch!(C, A, parent(U), _nthreads(), Val(true))
   return C
 end
-function ldiv!(U::UnitLowerTriangular{T}, A::AbstractMatrix{T}, ::Val{THREAD} = Val(true)) where {T<:Union{Float32,Float64},THREAD}
-  div_dispatch!(transpose(A), transpose(A), transpose(parent(U)), Val(true), Val(THREAD))
+function rdiv!(C::AbstractMatrix{T}, A::AbstractMatrix{T}, U::UnitUpperTriangular{T}, ::Val{false}) where {T<:Union{Float32,Float64}}
+  div_dispatch!(C, A, parent(U), static(0), Val(true))
+  return C
+end
+function ldiv!(U::LowerTriangular{T}, A::AbstractMatrix{T}, ::Val{true} = Val(true)) where {T<:Union{Float32,Float64}}
+  div_dispatch!(transpose(A), transpose(A), transpose(parent(U)), _nthreads(), Val(false))
   return A
 end
-function ldiv!(C::AbstractMatrix{T}, U::UnitLowerTriangular{T}, A::AbstractMatrix{T}, ::Val{THREAD} = Val(true)) where {T<:Union{Float32,Float64},THREAD}
-  div_dispatch!(transpose(C), transpose(A), transpose(parent(U)), Val(true), Val(THREAD))
+function ldiv!(U::LowerTriangular{T}, A::AbstractMatrix{T}, ::Val{false}) where {T<:Union{Float32,Float64}}
+  div_dispatch!(transpose(A), transpose(A), transpose(parent(U)), static(0), Val(false))
+  return A
+end
+function ldiv!(C::AbstractMatrix{T}, U::LowerTriangular{T}, A::AbstractMatrix{T}, ::Val{true} = Val(true)) where {T<:Union{Float32,Float64}}
+  div_dispatch!(transpose(C), transpose(A), transpose(parent(U)), _nthreads(), Val(false))
+  return C
+end
+function ldiv!(C::AbstractMatrix{T}, U::LowerTriangular{T}, A::AbstractMatrix{T}, ::Val{false}) where {T<:Union{Float32,Float64}}
+  div_dispatch!(transpose(C), transpose(A), transpose(parent(U)), static(0), Val(false))
+  return C
+end
+function ldiv!(U::UnitLowerTriangular{T}, A::AbstractMatrix{T}, ::Val{true} = Val(true)) where {T<:Union{Float32,Float64}}
+  div_dispatch!(transpose(A), transpose(A), transpose(parent(U)), _nthreads(), Val(true))
+  return A
+end
+function ldiv!(U::UnitLowerTriangular{T}, A::AbstractMatrix{T}, ::Val{false}) where {T<:Union{Float32,Float64}}
+  div_dispatch!(transpose(A), transpose(A), transpose(parent(U)), static(0), Val(true))
+  return A
+end
+function ldiv!(C::AbstractMatrix{T}, U::UnitLowerTriangular{T}, A::AbstractMatrix{T}, ::Val{true} = Val(true)) where {T<:Union{Float32,Float64}}
+  div_dispatch!(transpose(C), transpose(A), transpose(parent(U)), _nthreads(), Val(true))
+  return C
+end
+function ldiv!(C::AbstractMatrix{T}, U::UnitLowerTriangular{T}, A::AbstractMatrix{T}, ::Val{false}) where {T<:Union{Float32,Float64}}
+  div_dispatch!(transpose(C), transpose(A), transpose(parent(U)), static(0), Val(true))
   return C
 end
 
@@ -423,15 +456,10 @@ function rdiv_block_MandN!(
   end
   nothing
 end
-function _nthreads()
-  nc = VectorizationBase.num_cores()
-  nt = VectorizationBase.num_threads()
-  ifelse(Static.lt(nc,nt),nc,nt)
-end
-function m_thread_block_size(M, N, ::Val{T}) where {T}
+function m_thread_block_size(M, N, nthreads, ::Val{T}) where {T}
   W = VectorizationBase.pick_vector_width(T)
   WUF = W * unroll_factor(W)
-  nb = clamp(VectorizationBase.vdiv(M * N, StaticInt{256}() * W), 1, Int(_nthreads()))
+  nb = clamp(VectorizationBase.vdiv(M * N, StaticInt{256}() * W), 1, nthreads)
   min(M, VectorizationBase.vcld(M, nb*W)*W)
 end
 
