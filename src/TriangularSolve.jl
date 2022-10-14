@@ -423,24 +423,23 @@ function __init__()
   end
 end
 
-# using SnoopPrecompile
-# @static if VERSION >= v"1.8.0-beta1"
-#   @precompile_setup begin
-#     A = rand(1, 1)
-#     B = rand(1, 1)
-#     res = similar(A)
-#     @precompile_all_calls begin
-#       rdiv!(res, A, UpperTriangular(B))
-#       rdiv!(res, A, UnitUpperTriangular(B))
-#       rdiv!(res, A, UpperTriangular(B), Val(false))
-#       rdiv!(res, A, UnitUpperTriangular(B), Val(false))
+using SnoopPrecompile
+@static if VERSION >= v"1.8.0-beta1"
+  @precompile_setup begin
+    A = rand(1, 1)
+    B = rand(1, 1)
+    res = similar(A)
+    @precompile_all_calls begin
+      rdiv!(res, A, UpperTriangular(B))
+      rdiv!(res, A, UnitUpperTriangular(B))
+      rdiv!(res, A, UpperTriangular(B), Val(false))
+      rdiv!(res, A, UnitUpperTriangular(B), Val(false))
 
-#       __init__()
-#       ldiv!(res, LowerTriangular(B), A)
-#       ldiv!(res, UnitLowerTriangular(B), A)
-#       ldiv!(res, LowerTriangular(B), A, Val(false))
-#       ldiv!(res, UnitLowerTriangular(B), A, Val(false))
-#     end
-#   end
-# end
+      __init__()
+      ldiv!(res, LowerTriangular(B), A)
+      ldiv!(res, UnitLowerTriangular(B), A)
+      ldiv!(res, LowerTriangular(B), A, Val(false))
+      ldiv!(res, UnitLowerTriangular(B), A, Val(false))
+    end
+  end
 end
