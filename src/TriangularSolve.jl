@@ -205,7 +205,7 @@ function rdiv!(A::AbstractMatrix{T}, U::UpperTriangular{T}, ::Val{true} = Val(tr
   return A
 end
 function rdiv!(A::AbstractMatrix{T}, U::UpperTriangular{T}, ::Val{false}) where {T<:Union{Float32,Float64}}
-  div_dispatch!(A, A, parent(U), static(0), Val(false))
+  div_dispatch!(A, A, parent(U), static(1), Val(false))
   return A
 end
 function rdiv!(C::AbstractMatrix{T}, A::AbstractMatrix{T}, U::UpperTriangular{T}, ::Val{true} = Val(true)) where {T<:Union{Float32,Float64}}
@@ -213,7 +213,7 @@ function rdiv!(C::AbstractMatrix{T}, A::AbstractMatrix{T}, U::UpperTriangular{T}
   return C
 end
 function rdiv!(C::AbstractMatrix{T}, A::AbstractMatrix{T}, U::UpperTriangular{T}, ::Val{false}) where {T<:Union{Float32,Float64}}
-  div_dispatch!(C, A, parent(U), static(0), Val(false))
+  div_dispatch!(C, A, parent(U), static(1), Val(false))
   return C
 end
 function rdiv!(A::AbstractMatrix{T}, U::UnitUpperTriangular{T}, ::Val{true} = Val(true)) where {T<:Union{Float32,Float64}}
@@ -221,7 +221,7 @@ function rdiv!(A::AbstractMatrix{T}, U::UnitUpperTriangular{T}, ::Val{true} = Va
   return A
 end
 function rdiv!(A::AbstractMatrix{T}, U::UnitUpperTriangular{T}, ::Val{false}) where {T<:Union{Float32,Float64}}
-  div_dispatch!(A, A, parent(U), static(0), Val(true))
+  div_dispatch!(A, A, parent(U), static(1), Val(true))
   return A
 end
 function rdiv!(C::AbstractMatrix{T}, A::AbstractMatrix{T}, U::UnitUpperTriangular{T}, ::Val{true} = Val(true)) where {T<:Union{Float32,Float64}}
@@ -229,7 +229,7 @@ function rdiv!(C::AbstractMatrix{T}, A::AbstractMatrix{T}, U::UnitUpperTriangula
   return C
 end
 function rdiv!(C::AbstractMatrix{T}, A::AbstractMatrix{T}, U::UnitUpperTriangular{T}, ::Val{false}) where {T<:Union{Float32,Float64}}
-  div_dispatch!(C, A, parent(U), static(0), Val(true))
+  div_dispatch!(C, A, parent(U), static(1), Val(true))
   return C
 end
 function ldiv!(U::LowerTriangular{T}, A::AbstractMatrix{T}, ::Val{true} = Val(true)) where {T<:Union{Float32,Float64}}
@@ -237,7 +237,7 @@ function ldiv!(U::LowerTriangular{T}, A::AbstractMatrix{T}, ::Val{true} = Val(tr
   return A
 end
 function ldiv!(U::LowerTriangular{T}, A::AbstractMatrix{T}, ::Val{false}) where {T<:Union{Float32,Float64}}
-  div_dispatch!(transpose(A), transpose(A), transpose(parent(U)), static(0), Val(false))
+  div_dispatch!(transpose(A), transpose(A), transpose(parent(U)), static(1), Val(false))
   return A
 end
 function ldiv!(C::AbstractMatrix{T}, U::LowerTriangular{T}, A::AbstractMatrix{T}, ::Val{true} = Val(true)) where {T<:Union{Float32,Float64}}
@@ -245,7 +245,7 @@ function ldiv!(C::AbstractMatrix{T}, U::LowerTriangular{T}, A::AbstractMatrix{T}
   return C
 end
 function ldiv!(C::AbstractMatrix{T}, U::LowerTriangular{T}, A::AbstractMatrix{T}, ::Val{false}) where {T<:Union{Float32,Float64}}
-  div_dispatch!(transpose(C), transpose(A), transpose(parent(U)), static(0), Val(false))
+  div_dispatch!(transpose(C), transpose(A), transpose(parent(U)), static(1), Val(false))
   return C
 end
 function ldiv!(U::UnitLowerTriangular{T}, A::AbstractMatrix{T}, ::Val{true} = Val(true)) where {T<:Union{Float32,Float64}}
@@ -253,7 +253,7 @@ function ldiv!(U::UnitLowerTriangular{T}, A::AbstractMatrix{T}, ::Val{true} = Va
   return A
 end
 function ldiv!(U::UnitLowerTriangular{T}, A::AbstractMatrix{T}, ::Val{false}) where {T<:Union{Float32,Float64}}
-  div_dispatch!(transpose(A), transpose(A), transpose(parent(U)), static(0), Val(true))
+  div_dispatch!(transpose(A), transpose(A), transpose(parent(U)), static(1), Val(true))
   return A
 end
 function ldiv!(C::AbstractMatrix{T}, U::UnitLowerTriangular{T}, A::AbstractMatrix{T}, ::Val{true} = Val(true)) where {T<:Union{Float32,Float64}}
@@ -261,7 +261,7 @@ function ldiv!(C::AbstractMatrix{T}, U::UnitLowerTriangular{T}, A::AbstractMatri
   return C
 end
 function ldiv!(C::AbstractMatrix{T}, U::UnitLowerTriangular{T}, A::AbstractMatrix{T}, ::Val{false}) where {T<:Union{Float32,Float64}}
-  div_dispatch!(transpose(C), transpose(A), transpose(parent(U)), static(0), Val(true))
+  div_dispatch!(transpose(C), transpose(A), transpose(parent(U)), static(1), Val(true))
   return C
 end
 
