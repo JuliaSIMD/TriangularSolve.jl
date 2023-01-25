@@ -735,7 +735,7 @@ function __init__()
       Vector{UInt8}(undef, 3VectorizationBase.register_size() * 128)
   end
 end
-
+#=
 using SnoopPrecompile
 @static if VERSION >= v"1.8.0-beta1"
   @precompile_setup begin
@@ -756,4 +756,5 @@ using SnoopPrecompile
     end
   end
 end
+=#
 end
