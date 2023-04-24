@@ -740,13 +740,13 @@ function __init__()
   end
 end
 #=
-using SnoopPrecompile
+using PrecompileTools
 @static if VERSION >= v"1.8.0-beta1"
-  @precompile_setup begin
+  @setup_workload begin
     A = rand(1, 1)
     B = rand(1, 1)
     res = similar(A)
-    @precompile_all_calls begin
+    @compile_workload begin
       rdiv!(res, A, UpperTriangular(B))
       rdiv!(res, A, UnitUpperTriangular(B))
       rdiv!(res, A, UpperTriangular(B), Val(false))
