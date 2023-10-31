@@ -267,7 +267,7 @@ const LDIVBUFFERS = Vector{UInt8}[]
   RSUF = StaticInt{UF}() * VectorizationBase.register_size()
   L = RSUF * N
   L > length(buff) && resize!(buff, L % UInt)
-  ptr = Base.unsafe_convert(Ptr{T}, buff)
+  ptr = Base.unsafe_convert(Ptr{T}, pointer(buff))
   si = StrideIndex{2,(1, 2),1}(
     (VectorizationBase.static_sizeof(T), RSUF),
     (StaticInt(0), StaticInt(0))
