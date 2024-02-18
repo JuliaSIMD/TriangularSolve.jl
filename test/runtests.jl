@@ -43,7 +43,6 @@ end
 using Aqua
 Aqua.test_all(
   TriangularSolve;
-  ambiguities = false,
-  project_toml_formatting = false
+  ambiguities = false
 )
 @test isempty(Test.detect_ambiguities(TriangularSolve))
