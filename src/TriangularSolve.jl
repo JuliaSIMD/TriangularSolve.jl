@@ -261,19 +261,59 @@ end
   nothing
 end
 
-const LDIVBUFFERS = Vector{UInt8}[]
-@inline function lubuffer(::Val{T}, ::StaticInt{UF}, N) where {T,UF}
-  buff = LDIVBUFFERS[Threads.threadid()]
-  RSUF = StaticInt{UF}() * VectorizationBase.register_size()
+const buffer = Ref{Ptr{Cvoid}}(C_NULL)
+
+function __init__()
+  bp_size = 2 * sizeof(Int) * Threads.nthreads()
+  buffer[] = bp = Libc.malloc(bp_size)
+  Libc.memset(bp, 0, bp_size)
+end
+
+function _get_buffer_pointer(::StaticInt{UF}, N) where {UF}
+  RS = VectorizationBase.register_size()
+  RSUF = StaticInt{UF}() * RS
   L = RSUF * N
-  L > length(buff) && resize!(buff, L % UInt)
-  ptr = Base.unsafe_convert(Ptr{T}, pointer(buff))
+  tid = Threads.threadid() - 1
+  bp = Ptr{Pair{Ptr{Cvoid},Int}}(buffer[]) + 2sizeof(Int) * tid
+  (p, buff_current) = unsafe_load(bp)
+  if buff_current < L
+    p == C_NULL || Libc.free(p)
+    buff_size = max(RSUF * 128, L)
+    p = Libc.malloc(Int(buff_size + RS - 1))
+    unsafe_store!(bp, p => buff_size)
+  end
+  return VectorizationBase.align(p, RS)
+end
+
+@inline function lubuffer(::Val{T}, ::StaticInt{UF}, N) where {T,UF}
+  RS = VectorizationBase.register_size()
+  RSUF = StaticInt{UF}() * RS
+  ptr = Ptr{T}(_get_buffer_pointer(StaticInt{UF}(), N))
   si = StrideIndex{2,(1, 2),1}(
     (VectorizationBase.static_sizeof(T), RSUF),
     (StaticInt(0), StaticInt(0))
   )
-  stridedpointer(ptr, si, StaticInt{0}())
+  stridedpointer(ptr, si, StaticInt{0}()), nothing
 end
+@inline function lubuffer(
+  ::Val{T},
+  ::StaticInt{UF},
+  ::StaticInt{N}
+) where {T,UF,N}
+  RSUF = StaticInt{UF}() * VectorizationBase.pick_vector_width(T)
+  L = RSUF * N
+  buf = Ref{NTuple{L,T}}()
+  ptr = Base.unsafe_convert(Ptr{T}, buf)
+  si = StrideIndex{2,(1, 2),1}(
+    (
+      VectorizationBase.static_sizeof(T),
+      RSUF * VectorizationBase.static_sizeof(T)
+    ),
+    (StaticInt(0), StaticInt(0))
+  )
+  stridedpointer(ptr, si, StaticInt{0}()), buf
+end
+@inline _free(p::Ptr) = Libc.free(p)
 _canonicalize(x) = signed(x)
 _canonicalize(::StaticInt{N}) where {N} = StaticInt{N}()
 function div_dispatch!(
@@ -528,12 +568,12 @@ function block_size(::Val{T}) where {T}
 end
 
 nmuladd!(C, A, U, M, K, N) = @turbo for n ∈ CloseOpen(N), m ∈ CloseOpen(M)
-    Cmn = A[m, n]
-    for k ∈ CloseOpen(K)
-      Cmn -= C[m, k] * U[k, n]
-    end
-    C[m, K+n] = Cmn
+  Cmn = A[m, n]
+  for k ∈ CloseOpen(K)
+    Cmn -= C[m, k] * U[k, n]
   end
+  C[m, K+n] = Cmn
+end
 
 function rdiv_block_N!(
   spc::AbstractStridedPointer{T},
@@ -695,50 +735,44 @@ function rdiv_U!(
   WU = UF * WS
   MU = UF > 1 ? M : 0
   Nd, Nr = VectorizationBase.vdivrem(N, WS)
-  spb = lubuffer(Val(T), UF, N)
+  spb, preserve = lubuffer(Val(T), UF, N)
   m = 0
-  while m < MU - WU + 1
-    n = Nr
-    if n > 0
-      BdivU_small_kern_u!(spb, spc, spa, spu, n, UF, Val(UNIT))
+  GC.@preserve preserve begin
+    while m < MU - WU + 1
+      n = Nr
+      if n > 0
+        BdivU_small_kern_u!(spb, spc, spa, spu, n, UF, Val(UNIT))
+      end
+      for _ ∈ 1:Nd
+        rdiv_solve_W_u!(spb, spc, spa, spu, n, WS, UF, Val(UNIT))
+        n += W
+      end
+      m += WU
+      spa = gesp(spa, (WU, StaticInt(0)))
+      spc = gesp(spc, (WU, StaticInt(0)))
     end
-    for _ ∈ 1:Nd
-      rdiv_solve_W_u!(spb, spc, spa, spu, n, WS, UF, Val(UNIT))
-      n += W
+    finalmask = VectorizationBase.mask(WS, M)
+    while m < M
+      ubm = m + W
+      nomaskiter = ubm < M
+      mask = nomaskiter ? VectorizationBase.max_mask(WS) : finalmask
+      n = Nr
+      if n > 0
+        BdivU_small_kern!(spb, spc, spa, spu, n, mask, Val(UNIT))
+      end
+      for i ∈ 1:Nd
+        # @show C, n
+        rdiv_solve_W!(spb, spc, spa, spu, n, i ≠ Nd, mask, Val(UNIT))
+        n += W
+      end
+      spa = gesp(spa, (WS, StaticInt(0)))
+      spc = gesp(spc, (WS, StaticInt(0)))
+      m = ubm
     end
-    m += WU
-    spa = gesp(spa, (WU, StaticInt(0)))
-    spc = gesp(spc, (WU, StaticInt(0)))
-  end
-  finalmask = VectorizationBase.mask(WS, M)
-  while m < M
-    ubm = m + W
-    nomaskiter = ubm < M
-    mask = nomaskiter ? VectorizationBase.max_mask(WS) : finalmask
-    n = Nr
-    if n > 0
-      BdivU_small_kern!(spb, spc, spa, spu, n, mask, Val(UNIT))
-    end
-    for i ∈ 1:Nd
-      # @show C, n
-      rdiv_solve_W!(spb, spc, spa, spu, n, i ≠ Nd, mask, Val(UNIT))
-      n += W
-    end
-    spa = gesp(spa, (WS, StaticInt(0)))
-    spc = gesp(spc, (WS, StaticInt(0)))
-    m = ubm
   end
   nothing
 end
 
-function __init__()
-  nthread = Threads.nthreads()
-  resize!(LDIVBUFFERS, nthread)
-  for i ∈ 1:nthread
-    LDIVBUFFERS[i] =
-      Vector{UInt8}(undef, 3VectorizationBase.register_size() * 128)
-  end
-end
 #=
 using PrecompileTools
 @static if VERSION >= v"1.8.0-beta1"
