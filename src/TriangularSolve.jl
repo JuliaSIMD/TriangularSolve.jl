@@ -439,7 +439,7 @@ end
     end
   else
     quote
-      mask = VectorizationBase.mask($WS, $(static(R)))
+      mask = VectorizationBase.mask($(static(Wpad)), $(static(R)))
       i = $(Unroll{2,1,W,1,Wpad,(-1 % UInt),1})(($z, n))
       vstore!(spc, C_u, i, mask)
     end
