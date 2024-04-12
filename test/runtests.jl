@@ -1,13 +1,31 @@
 using TriangularSolve, LinearAlgebra
 using Test
 
+function check_box_for_nans(A, M, N)
+  # blocks start at 17, and are MxN
+  @test all(isnan, @view(A[1:16, :]))
+  @test all(isnan, @view(A[17+M:end, :]))
+  @test all(isnan, @view(A[17:16+M, 1:16]))
+  @test all(isnan, @view(A[17:16+M, 17+N:end]))
+end
+
 function test_solve(::Type{T}) where {T}
-  for n ∈ 1:(T === Float32 ? 100 : 200)
+  maxN = (T === Float32 ? 100 : 200)
+  maxM = maxN + 10
+  AA = fill(T(NaN), maxM + 32, maxM + 32)
+  RR = fill(T(NaN), maxM + 32, maxM + 32)
+  BB = fill(T(NaN), maxN + 32, maxN + 32)
+  for n ∈ 1:maxN
     @show n
     for m ∈ max(1, n - 10):n+10
-      A = rand(T, m, n)
-      res = similar(A)
-      B = rand(T, n, n) + I
+      A = @view AA[17:16+m, 17:16+n]
+      res = @view RR[17:16+m, 17:16+n]
+      B = @view BB[17:16+n, 17:16+n]
+
+      A .= rand.(T)
+      B .= rand.(T)
+      @view(B[diagind(B)]) .+= one(T)
+
       @test TriangularSolve.rdiv!(res, A, UpperTriangular(B)) *
             UpperTriangular(B) ≈ A
       @test TriangularSolve.rdiv!(res, A, UnitUpperTriangular(B)) *
@@ -16,8 +34,15 @@ function test_solve(::Type{T}) where {T}
             UpperTriangular(B) ≈ A
       @test TriangularSolve.rdiv!(res, A, UnitUpperTriangular(B), Val(false)) *
             UnitUpperTriangular(B) ≈ A
-      A = rand(T, n, m)
-      res = similar(A)
+
+      check_box_for_nans(RR, m, n)
+      res .= NaN
+      A .= NaN
+
+      A = @view AA[17:16+n, 17:16+m]
+      res = @view RR[17:16+n, 17:16+m]
+      A .= rand.(T)
+
       @test LowerTriangular(B) *
             TriangularSolve.ldiv!(res, LowerTriangular(B), A) ≈ A
       @test UnitLowerTriangular(B) *
@@ -27,6 +52,10 @@ function test_solve(::Type{T}) where {T}
       @test UnitLowerTriangular(B) *
             TriangularSolve.ldiv!(res, UnitLowerTriangular(B), A, Val(false)) ≈
             A
+      check_box_for_nans(RR, n, m)
+      res .= NaN
+      A .= NaN
+      B .= NaN
     end
   end
 end
