@@ -489,8 +489,6 @@ end
   spu::AbstractStridedPointer,
   M,
   N,
-  ::StaticInt{1},
-  ::StaticInt{1},
   ::Val{UNIT}
 ) where {T,UNIT}
   WS = pick_vector_width(T)
@@ -534,59 +532,6 @@ end
   nothing
 end
 
-const buffer = Ref{Ptr{Cvoid}}(C_NULL)
-
-function __init__()
-  bp_size = 2 * sizeof(Int) * Threads.nthreads()
-  buffer[] = bp = Libc.malloc(bp_size % UInt)
-  Libc.memset(bp, 0, bp_size)
-end
-
-function _get_buffer_pointer(::StaticInt{UF}, N) where {UF}
-  RS = VectorizationBase.register_size()
-  RSUF = StaticInt{UF}() * RS
-  L = RSUF * N
-  tid = Threads.threadid() - 1
-  bp = Ptr{Pair{Ptr{Cvoid},Int}}(buffer[]) + 2sizeof(Int) * tid
-  (p, buff_current) = unsafe_load(bp)
-  if buff_current < L
-    p == C_NULL || Libc.free(p)
-    buff_size = max(RSUF * 128, L)
-    p = Libc.malloc((buff_size + RS - 1) % UInt)
-    unsafe_store!(bp, p => buff_size)
-  end
-  return VectorizationBase.align(p, RS)
-end
-
-@inline function lubuffer(::Val{T}, ::StaticInt{UF}, N) where {T,UF}
-  RS = VectorizationBase.register_size()
-  RSUF = StaticInt{UF}() * RS
-  ptr = Ptr{T}(_get_buffer_pointer(StaticInt{UF}(), N))
-  si = StrideIndex{2,(1, 2),1}(
-    (VectorizationBase.static_sizeof(T), RSUF),
-    (StaticInt(0), StaticInt(0))
-  )
-  stridedpointer(ptr, si, StaticInt{0}()), nothing
-end
-@inline function lubuffer(
-  ::Val{T},
-  ::StaticInt{UF},
-  ::StaticInt{N}
-) where {T,UF,N}
-  RSUF = StaticInt{UF}() * VectorizationBase.pick_vector_width(T)
-  L = RSUF * N
-  buf = Ref{NTuple{L,T}}()
-  ptr = Base.unsafe_convert(Ptr{T}, buf)
-  si = StrideIndex{2,(1, 2),1}(
-    (
-      VectorizationBase.static_sizeof(T),
-      RSUF * VectorizationBase.static_sizeof(T)
-    ),
-    (StaticInt(0), StaticInt(0))
-  )
-  stridedpointer(ptr, si, StaticInt{0}()), buf
-end
-@inline _free(p::Ptr) = Libc.free(p)
 _canonicalize(x) = signed(x)
 _canonicalize(::StaticInt{N}) where {N} = StaticInt{N}()
 function div_dispatch!(
@@ -606,17 +551,14 @@ function div_dispatch!(
   spa = zero_offsets(_spa)
   spc = zero_offsets(_spc)
   spu = zero_offsets(_spu)
-  XC = VectorizationBase.contiguous_axis(C)
-  XA = VectorizationBase.contiguous_axis(A)
   GC.@preserve spap spcp spup begin
     mtb = m_thread_block_size(M, N, nthread, Val(T))
     if nthread > 1
-      (M > mtb) &&
-        return multithread_rdiv!(spc, spa, spu, M, N, mtb, Val(UNIT), XC, XA)
+      (M > mtb) && return multithread_rdiv!(spc, spa, spu, M, N, mtb, Val(UNIT))
     elseif N > block_size(Val(T))
-      return rdiv_block_MandN!(spc, spa, spu, M, N, Val(UNIT), XC, XA)
+      return rdiv_block_MandN!(spc, spa, spu, M, N, Val(UNIT))
     end
-    return rdiv_U!(spc, spa, spu, M, N, XC, XA, Val(UNIT))
+    return rdiv_U!(spc, spa, spu, M, N, Val(UNIT))
   end
 end
 
@@ -833,10 +775,8 @@ function rdiv_block_N!(
   M,
   N,
   ::Val{UNIT},
-  ::StaticInt{XC},
-  ::StaticInt{XA},
   Bsize = nothing
-) where {T,UNIT,XC,XA}
+) where {T,UNIT}
   spa_rdiv = spa
   spc_base = spc
   n = 0
@@ -857,8 +797,6 @@ function rdiv_block_N!(
       gesp(spu, (n, StaticInt{0}())),
       M,
       N_temp,
-      StaticInt{XC}(),
-      StaticInt{XA}(),
       Val{UNIT}()
     )
     repeat || break
@@ -873,18 +811,16 @@ function rdiv_block_N!(
   end
 end
 function rdiv_block_MandN!(
-  spc::AbstractStridedPointer{T},
-  spa,
-  spu,
+  spc::AbstractStridedPointer{T,<:Any,XC},
+  spa::AbstractStridedPointer{T,<:Any,XA},
+  spu::AbstractStridedPointer{T,<:Any,XU},
   M,
   N,
-  ::Val{UNIT},
-  ::StaticInt{XC},
-  ::StaticInt{XA}
-) where {T,UNIT,XC,XA}
+  ::Val{UNIT}
+) where {T,UNIT,XC,XA,XU}
   B = block_size(Val(T))
   W = VectorizationBase.pick_vector_width(T)
-  WUF = XC == XA == 2 ? W : W * unroll_factor(W)
+  WUF = XC == XA == XA == 2 ? W : W * unroll_factor(W)
   B_m = VectorizationBase.vcld(M, VectorizationBase.vcld(M, B) * WUF) * WUF
   m = 0
   while m < M
@@ -897,8 +833,6 @@ function rdiv_block_MandN!(
       Mtemp,
       N,
       Val{UNIT}(),
-      StaticInt{XC}(),
-      StaticInt{XA}(),
       VectorizationBase.vcld(N, VectorizationBase.vcld(N, B) * W) * W
     )
     spa = gesp(spa, (B_m, StaticInt{0}()))
@@ -913,12 +847,12 @@ function m_thread_block_size(M, N, nthreads, ::Val{T}) where {T}
   min(M, VectorizationBase.vcld(M, nb * W) * W)
 end
 
-struct RDivBlockMandNv2{UNIT,XC,XA} end
-function (f::RDivBlockMandNv2{UNIT,XC,XA})(
+struct RDivBlockMandNv2{UNIT} end
+function (f::RDivBlockMandNv2{UNIT})(
   allargs,
   blockstart,
   blockstop
-) where {UNIT,XC,XA}
+) where {UNIT}
   spc, spa, spu, N, Mrem, Nblock, mtb = allargs
   for block = blockstart-1:blockstop-1
     rdiv_block_MandN!(
@@ -927,9 +861,7 @@ function (f::RDivBlockMandNv2{UNIT,XC,XA})(
       spu,
       Core.ifelse(block == Nblock - 1, Mrem, mtb),
       N,
-      Val{UNIT}(),
-      static(XC),
-      static(XA)
+      Val{UNIT}()
     )
   end
 end
@@ -941,17 +873,14 @@ function multithread_rdiv!(
   M::Int,
   N::Int,
   mtb::Int,
-  ::Val{UNIT},
-  ::StaticInt{XC},
-  ::StaticInt{XA}
-) where {XC,XA,UNIT,TC,TA,TU}
+  ::Val{UNIT}
+) where {UNIT,TC,TA,TU}
   # Main._a[] = (spc, spa, spu, M, N, mtb, Val(UNIT), static(X));
   (Md, Mr) = VectorizationBase.vdivrem(M, mtb)
   Nblock = Md + (Mr ≠ 0)
   Mrem = Core.ifelse(Mr ≠ 0, Mr, mtb)
-  f = RDivBlockMandNv2{UNIT,XC,XA}()
   batch(
-    f,
+    RDivBlockMandNv2{UNIT}(),
     (Nblock, min(Nblock, Threads.nthreads())),
     spc,
     spa,
@@ -975,60 +904,6 @@ function unroll_factor(::StaticInt{W}) where {W}
     (VectorizationBase.register_count() - StaticInt{1}()) ÷
     (StaticInt{W}() + StaticInt{1}())
   ifelse(Static.lt(num_blocks, StaticInt{1}()), StaticInt{1}(), num_blocks)
-end
-
-function rdiv_U!(
-  spc::AbstractStridedPointer{T},
-  spa::AbstractStridedPointer,
-  spu::AbstractStridedPointer,
-  M,
-  N,
-  ::StaticInt{var"#UNUSED1#"},
-  ::StaticInt{var"#UNUSED2#"},
-  ::Val{UNIT}
-) where {T,UNIT,var"#UNUSED1#",var"#UNUSED2#"}
-  WS = pick_vector_width(T)
-  W = Int(WS)
-  UF = unroll_factor(WS)
-  WU = UF * WS
-  Nd, Nr = VectorizationBase.vdivrem(N, WS)
-  spb, preserve = lubuffer(Val(T), UF, N)
-  m = 0
-  GC.@preserve preserve begin
-    if UF > 1
-      while m < M - WU + 1
-        n = Nr
-        if n > 0
-          BdivU_small_kern_u!(spb, spc, spa, spu, n, UF, Val(UNIT), WS)
-        end
-        for _ ∈ 1:Nd
-          rdiv_solve_W_u!(spb, spc, spa, spu, n, WS, UF, Val(UNIT))
-          n += W
-        end
-        m += WU
-        spa = gesp(spa, (WU, StaticInt(0)))
-        spc = gesp(spc, (WU, StaticInt(0)))
-      end
-    end
-    finalmask = VectorizationBase.mask(WS, M)
-    while m < M
-      ubm = m + W
-      nomaskiter = ubm < M
-      mask = nomaskiter ? VectorizationBase.max_mask(WS) : finalmask
-      n = Nr
-      if n > 0
-        BdivU_small_kern!(spb, spc, spa, spu, n, mask, Val(UNIT))
-      end
-      for i ∈ 1:Nd
-        rdiv_solve_W!(spb, spc, spa, spu, n, i ≠ Nd, mask, Val(UNIT))
-        n += W
-      end
-      spa = gesp(spa, (WS, StaticInt(0)))
-      spc = gesp(spc, (WS, StaticInt(0)))
-      m = ubm
-    end
-  end
-  nothing
 end
 
 @generated function _ldiv_remainder!(
@@ -1109,20 +984,38 @@ end
 ) where {W,UNIT}
   WS = static(W)
   # US = static(U)
-  quote
-    # $(Expr(:meta, :inline))
-    Base.Cartesian.@nif $(W - 1) w -> m == M - w w -> _ldiv_remainder!(
-      spc,
-      spa,
-      spu,
-      M,
-      N,
-      m,
-      Nr,
-      $WS,
-      $(Val(UNIT)),
-      StaticInt(w)
-    )
+  if W == 2
+    quote
+      $(Expr(:meta, :inline))
+      _ldiv_remainder!(
+        spc,
+        spa,
+        spu,
+        M,
+        N,
+        m,
+        Nr,
+        $WS,
+        $(Val(UNIT)),
+        $(static(1))
+      )
+    end
+  else
+    quote
+      # $(Expr(:meta, :inline))
+      Base.Cartesian.@nif $(W - 1) w -> m == M - w w -> _ldiv_remainder!(
+        spc,
+        spa,
+        spu,
+        M,
+        N,
+        m,
+        Nr,
+        $WS,
+        $(Val(UNIT)),
+        StaticInt(w)
+      )
+    end
   end
 end
 
@@ -1130,13 +1023,11 @@ end
 # spc' = (spu' \ spa')'
 # This is ldiv
 function rdiv_U!(
-  spc::AbstractStridedPointer{T},
-  spa::AbstractStridedPointer,
-  spu::AbstractStridedPointer,
+  spc::AbstractStridedPointer{T,2,2},
+  spa::AbstractStridedPointer{T,2,2},
+  spu::AbstractStridedPointer{T,2,2},
   M,
   N,
-  ::StaticInt{2},
-  ::StaticInt{2},
   ::Val{UNIT}
 ) where {T,UNIT}
   WS = pick_vector_width(T)
