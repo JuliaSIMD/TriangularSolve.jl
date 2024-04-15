@@ -132,7 +132,74 @@ Platform Info:
 Environment:
   JULIA_NUM_THREADS = 8
 ```
+Single-threaded benchmarks on an M1 mac:
+```julia
+julia> N = 100;
 
+julia> A = rand(N,N); B = rand(N,N); C = similar(A);
+
+julia> @benchmark TriangularSolve.rdiv!($C, $A, UpperTriangular($B), Val(false)) # false means single threaded
+BenchmarkTools.Trial: 10000 samples with 1 evaluation.
+ Range (min … max):  21.416 μs …  34.458 μs  ┊ GC (min … max): 0.00% … 0.00%
+ Time  (median):     21.624 μs               ┊ GC (median):    0.00%
+ Time  (mean ± σ):   21.767 μs ± 491.788 ns  ┊ GC (mean ± σ):  0.00% ± 0.00%
+
+    ▃ ▆██ ▆▄ ▁                 ▃▄ ▄▂          ▁            ▂▃▁ ▂
+  ▃▇█▁███▁██▁█▆▁▁▁▁▁▁▁▁▁▁▁▁▁▃█▁██▁███▁▆▃▁▁▆▇▁██▁█▆▅▁▄▃▁▃▃▇▁███ █
+  21.4 μs       Histogram: log(frequency) by time      23.2 μs <
+
+ Memory estimate: 0 bytes, allocs estimate: 0.
+
+julia> @benchmark rdiv!(copyto!($C, $A), UpperTriangular($B))
+BenchmarkTools.Trial: 10000 samples with 1 evaluation.
+ Range (min … max):  39.124 μs … 57.749 μs  ┊ GC (min … max): 0.00% … 0.00%
+ Time  (median):     46.166 μs              ┊ GC (median):    0.00%
+ Time  (mean ± σ):   46.274 μs ±  1.766 μs  ┊ GC (mean ± σ):  0.00% ± 0.00%
+
+                              ▁▁▄▂▆▃█▅▇▄▇▅▃▃▁▃▁▂               
+  ▂▁▁▂▂▂▂▂▁▂▂▂▂▂▂▃▃▃▃▃▄▄▅▅▆▅▇▇████████████████████▆▇▆▆▅▆▅▅▄▃▃ ▅
+  39.1 μs         Histogram: frequency by time        50.2 μs <
+
+ Memory estimate: 0 bytes, allocs estimate: 0.
+
+julia> @benchmark ldiv!($C, LowerTriangular($B), $A)
+BenchmarkTools.Trial: 10000 samples with 1 evaluation.
+ Range (min … max):  48.291 μs …  57.833 μs  ┊ GC (min … max): 0.00% … 0.00%
+ Time  (median):     49.124 μs               ┊ GC (median):    0.00%
+ Time  (mean ± σ):   49.306 μs ± 802.143 ns  ┊ GC (mean ± σ):  0.00% ± 0.00%
+
+    ▁▃▅▆▇██▇██▇▇▆▅▄▂▂▁▁▁▂▁▁▁▁▁▁▁ ▁▁▁                           ▃
+  ▃████████████████████████████████████▇▆▄▂▄▃▂▃▃▄▄▃▆▅▇▇▇██▇█▇▇ █
+  48.3 μs       Histogram: log(frequency) by time        53 μs <
+
+ Memory estimate: 0 bytes, allocs estimate: 0.
+
+julia> @benchmark TriangularSolve.ldiv!($C, LowerTriangular($B), $A, Val(false)) # false means single threaded
+BenchmarkTools.Trial: 10000 samples with 1 evaluation.
+ Range (min … max):  34.249 μs …  40.208 μs  ┊ GC (min … max): 0.00% … 0.00%
+ Time  (median):     34.375 μs               ┊ GC (median):    0.00%
+ Time  (mean ± σ):   34.748 μs ± 774.675 ns  ┊ GC (mean ± σ):  0.00% ± 0.00%
+
+  ▆██▆▃▄▅▃                ▁▁▄▅▅▃▂▁                     ▂▃▂  ▁▂ ▂
+  ████████▁▁▃▁▁▁▁▁▃▄▃▁▁▃██████████▇▅▄▅▅▆▄▄▄▄▄▅▄▄▃▅▃▄▃▅█████▇██ █
+  34.2 μs       Histogram: log(frequency) by time      37.1 μs <
+
+ Memory estimate: 0 bytes, allocs estimate: 0.
+```
+Or
+```julia
+julia> @benchmark TriangularSolve.ldiv!($C, LowerTriangular($B), $A, Val(false)) # false means single threaded
+BenchmarkTools.Trial: 10000 samples with 1 evaluation.
+ Range (min … max):  23.750 μs …  30.541 μs  ┊ GC (min … max): 0.00% … 0.00%
+ Time  (median):     23.875 μs               ┊ GC (median):    0.00%
+ Time  (mean ± σ):   23.948 μs ± 316.293 ns  ┊ GC (mean ± σ):  0.00% ± 0.00%
+
+   ▃▁▆ █ ▇▆▆ ▄ ▁                               ▁ ▁         ▁ ▁ ▂
+  ▅███▆█▁███▄█▁██▇▁▄▁▁▁▁▁▃▁▁▁▁▁▁▁▃▁▁▁▃▁▁▁▁▁▆▁▇▆█▁█▁▇▆▅▁▅▁▇▆█▁█ █
+  23.8 μs       Histogram: log(frequency) by time        25 μs <
+
+ Memory estimate: 0 bytes, allocs estimate: 0.
+```
 
 For editing convenience (you can copy/paste the above into a REPL and it should automatically strip `julia> `s and outputs, but the above is less convenient to edit if you want to try changing the benchmarks):
 ```julia
