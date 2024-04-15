@@ -1,5 +1,5 @@
 module TriangularSolve
-using Base: @nexprs
+using Base: @nexprs, @ntuple
 if isdefined(Base, :Experimental) &&
    isdefined(Base.Experimental, Symbol("@max_methods"))
   @eval Base.Experimental.@max_methods 1
@@ -53,92 +53,128 @@ end
 @inline maybestore!(p, v, i, m) = vstore!(p, v, i, m)
 @inline maybestore!(::Nothing, v, i, m) = nothing
 
-@inline function store_small_kern!(spa, sp, v, _, i, n, mask, ::Val{true})
+@inline function store_small_kern!(spa, sp, v, i, mask)
   vstore!(spa, v, i, mask)
   vstore!(sp, v, i, mask)
 end
-@inline store_small_kern!(spa, ::Nothing, v, spu, i, n, mask, ::Val{true}) =
-  vstore!(spa, v, i, mask)
+@inline store_small_kern!(spa, ::Nothing, v, i, mask) = vstore!(spa, v, i, mask)
 
-@inline function store_small_kern!(spa, sp, v, spu, i, n, mask, ::Val{false})
-  x = v / vload(spu, (n, n))
-  vstore!(spa, x, i, mask)
-  vstore!(sp, x, i, mask)
-end
-@inline store_small_kern!(spa, ::Nothing, v, spu, i, n, mask, ::Val{false}) =
-  vstore!(spa, v / vload(spu, (n, n)), i, mask)
-
-@inline function store_small_kern!(spa, sp, v, spu, i, n, ::Val{true})
+@inline function store_small_kern!(spa, sp, v, i)
   vstore!(spa, v, i)
   vstore!(sp, v, i)
 end
-@inline store_small_kern!(spa, ::Nothing, v, spu, i, n, ::Val{true}) =
-  vstore!(spa, v, i)
+@inline store_small_kern!(spa, ::Nothing, v, i) = vstore!(spa, v, i)
 
-@inline function store_small_kern!(spa, sp, v, spu, i, n, ::Val{false})
-  x = v / vload(spu, (n, n))
-  vstore!(spa, x, i)
-  vstore!(sp, x, i)
-end
-@inline store_small_kern!(spa, ::Nothing, v, spu, i, n, ::Val{false}) =
-  vstore!(spa, v / vload(spu, (n, n)), i)
-
-@inline function BdivU_small_kern!(
+@generated function BdivU_small_kern!(
   spa::AbstractStridedPointer{T},
   sp,
   spb::AbstractStridedPointer{T},
   spu::AbstractStridedPointer{T},
-  N,
+  ::StaticInt{N},
+  mask::AbstractMask{W},
+  ::Val{UNIT}
+) where {T,UNIT,W,N}
+  z = static(0)
+  if N == 1
+    i = (MM{W}(z), z)
+    Amn = :(vload(spb, $i, mask))
+    if !UNIT
+      Amn = :($Amn / vload(spu, $((z, z))))
+    end
+    quote
+      $(Expr(:meta, :inline))
+      store_small_kern!(spa, sp, $Amn, $i, mask)
+    end
+  else
+    unroll = Unroll{2,1,N,1,W,(-1 % UInt),1}((z, z))
+    tostore = :(VecUnroll(Base.Cartesian.@ntuple $N Amn))
+    scale = UNIT ? nothing : :(Amn_n /= vload(spu, (n - 1, n - 1)))
+    quote
+      $(Expr(:meta, :inline))
+      Amn = getfield(vload(spb, $unroll, mask), :data)
+      Base.Cartesian.@nexprs $N n -> begin
+        Amn_n = getfield(Amn, n)
+        Base.Cartesian.@nexprs (n - 1) k -> begin
+          Amn_n = vfnmadd_fast(Amn_k, vload(spu, (k - 1, n - 1)), Amn_n)
+        end
+        $scale
+      end
+      store_small_kern!(spa, sp, $tostore, $unroll, mask)
+    end
+  end
+end
+@generated function BdivU_small_kern_u!(
+  spa::AbstractStridedPointer{T},
+  sp,
+  spb::AbstractStridedPointer{T},
+  spu::AbstractStridedPointer{T},
+  ::StaticInt{N},
+  ::StaticInt{U},
+  ::Val{UNIT},
+  ::StaticInt{W}
+) where {T,U,UNIT,N,W}
+  z = static(0)
+  if N == 1
+    unroll = Unroll{1,W,U,1,W,zero(UInt),1}((z, z))
+    Amn = :(vload(spb, $unroll))
+    if !UNIT
+      Amn = :($Amn / vload(spu, $((z, z))))
+    end
+    quote
+      $(Expr(:meta, :inline))
+      store_small_kern!(spa, sp, $Amn, $unroll)
+    end
+  else
+    double_unroll =
+      Unroll{2,1,N,1,W,zero(UInt),1}(Unroll{1,W,U,1,W,zero(UInt),1}((z, z)))
+    tostore = :(VecUnroll(Base.Cartesian.@ntuple $N Amn))
+    scale = UNIT ? nothing : :(Amn_n /= vload(spu, (n - 1, n - 1)))
+    quote
+      $(Expr(:meta, :inline))
+      Amn = getfield(vload(spb, $double_unroll), :data)
+      Base.Cartesian.@nexprs $N n -> begin
+        Amn_n = getfield(Amn, n)
+        Base.Cartesian.@nexprs (n - 1) k -> begin
+          Amn_n = vfnmadd_fast(Amn_k, vload(spu, (k - 1, n - 1)), Amn_n)
+        end
+        $scale
+      end
+      store_small_kern!(spa, sp, $tostore, $double_unroll)
+    end
+  end
+end
+@generated function BdivU_small_kern!(
+  spa::AbstractStridedPointer{T},
+  sp,
+  spb::AbstractStridedPointer{T},
+  spu::AbstractStridedPointer{T},
+  Nr::Int,
   mask::AbstractMask{W},
   ::Val{UNIT}
 ) where {T,UNIT,W}
-  # W = VectorizationBase.pick_vector_width(T)
-  for n ∈ CloseOpen(N)
-    Amn = vload(spb, (MM{W}(StaticInt(0)), n), mask)
-    for k ∈ SafeCloseOpen(n)
-      Amn = vfnmadd_fast(
-        vload(spa, (MM{W}(StaticInt(0)), k), mask),
-        vload(spu, (k, n)),
-        Amn
-      )
-    end
-    store_small_kern!(
-      spa,
-      sp,
-      Amn,
-      spu,
-      (MM{W}(StaticInt(0)), n),
-      n,
-      mask,
-      Val{UNIT}()
-    )
+  quote
+    # $(Expr(:meta, :inline))
+    Base.Cartesian.@nif $(W - 1) n -> n == Nr n ->
+      BdivU_small_kern!(spa, sp, spb, spu, static(n), mask, $(Val(UNIT)))
   end
 end
-@inline function BdivU_small_kern_u!(
+@generated function BdivU_small_kern_u!(
   spa::AbstractStridedPointer{T},
   sp,
   spb::AbstractStridedPointer{T},
   spu::AbstractStridedPointer{T},
-  N,
+  Nr::Int,
   ::StaticInt{U},
-  ::Val{UNIT}
-) where {T,U,UNIT}
-  W = Int(VectorizationBase.pick_vector_width(T))
-  for n ∈ CloseOpen(N)
-    Amn = vload(spb, Unroll{1,W,U,1,W,zero(UInt),1}((StaticInt(0), n)))
-    for k ∈ SafeCloseOpen(n)
-      Amk = vload(spa, Unroll{1,W,U,1,W,zero(UInt),1}((StaticInt(0), k)))
-      Amn = vfnmadd_fast(Amk, vload(spu, (k, n)), Amn)
-    end
-    store_small_kern!(
-      spa,
-      sp,
-      Amn,
-      spu,
-      Unroll{1,W,U,1,W,zero(UInt),1}((StaticInt(0), n)),
-      n,
-      Val{UNIT}()
-    )
+  ::Val{UNIT},
+  ::StaticInt{W}
+) where {T,U,UNIT,W}
+  su = static(U)
+  vu = Val(UNIT)
+  sw = static(W)
+  quote
+    # $(Expr(:meta, :inline))
+    Base.Cartesian.@nif $(W - 1) n -> n == Nr n ->
+      BdivU_small_kern_u!(spa, sp, spb, spu, static(n), $su, $vu, $sw)
   end
 end
 
@@ -232,7 +268,7 @@ end
 ) where {W,U,UNIT}
   z = static(0)
   quote
-    $(Expr(:meta, :inline))
+    # $(Expr(:meta, :inline))
     # C = L \ A; L * C = A
     # A_{i,j} = L_{i,i}*C_{i,j} + \sum_{k=1}^{i-1}L_{i,k}C_{k,j}
     # C_{i,j} = L_{i,i} \ (A_{i,j} - \sum_{k=1}^{i-1}L_{i,k}C_{k,j})
@@ -328,7 +364,7 @@ end
 ) where {W,UNIT}
   z = static(0)
   quote
-    $(Expr(:meta, :inline))
+    # $(Expr(:meta, :inline))
     # Like `ldiv_solve_W_u!`, except no unrolling, just a `W`x`W` block
     #
     # C = L \ A; L * C = A
@@ -382,9 +418,8 @@ end
   R <= 1 && throw("Remainder of `<= 1` shouldn't be called, but had $R.")
   R >= W && throw("Reaminderof `>= $W` shouldn't be called, but had $R.")
   z = static(0)
-  WS = static(W)
   q = quote
-    $(Expr(:meta, :inline))
+    # $(Expr(:meta, :inline))
     # Like `ldiv_solve_W_u!`, except no unrolling, just a `W`x`W` block
     #
     # C = L \ A; L * C = A
@@ -447,6 +482,7 @@ end
   push!(q.args, q3)
   return q
 end
+
 @inline function rdiv_U!(
   spc::AbstractStridedPointer{T},
   spa::AbstractStridedPointer,
@@ -467,7 +503,7 @@ end
     while m < M - WU + 1
       n = Nr
       if n > 0
-        BdivU_small_kern_u!(spc, nothing, spa, spu, n, UF, Val(UNIT))
+        BdivU_small_kern_u!(spc, nothing, spa, spu, n, UF, Val(UNIT), WS)
       end
       for _ ∈ 1:Nd
         rdiv_solve_W_u!(spc, nothing, spa, spu, n, WS, UF, Val(UNIT))
@@ -963,7 +999,7 @@ function rdiv_U!(
       while m < M - WU + 1
         n = Nr
         if n > 0
-          BdivU_small_kern_u!(spb, spc, spa, spu, n, UF, Val(UNIT))
+          BdivU_small_kern_u!(spb, spc, spa, spu, n, UF, Val(UNIT), WS)
         end
         for _ ∈ 1:Nd
           rdiv_solve_W_u!(spb, spc, spa, spu, n, WS, UF, Val(UNIT))
@@ -995,7 +1031,7 @@ function rdiv_U!(
   nothing
 end
 
-@generated function ldiv_remainder!(
+@generated function _ldiv_remainder!(
   spc,
   spa,
   spu,
@@ -1011,16 +1047,20 @@ end
   r >= W && throw("Reaminderof `>= $W` shouldn't be called, but had $r.")
   if r == 1
     z = static(0)
+    sub = Base.FastMath.sub_fast
+    mul = Base.FastMath.mul_fast
+    div = Base.FastMath.div_fast
     vlxj = :(vload(spc, ($z, j)))
     if UNIT
       vlxj = :(xj = $vlxj)
     else
       vlxj = quote
-        xj = $vlxj / vload(spu, (j, j))
+        xj = $div($vlxj, vload(spu, (j, j)))
         vstore!(spc, xj, ($z, j))
       end
     end
     quote
+      $(Expr(:meta, :inline))
       if pointer(spc) != pointer(spa)
         for n = 0:N-1
           vstore!(spc, vload(spa, ($z, n)), ($z, n))
@@ -1031,7 +1071,7 @@ end
         for i = (j+1):N-1
           xi = vload(spc, ($z, i))
           Uji = vload(spu, (j, i))
-          vstore!(spc, xi - xj * Uji, ($z, i))
+          vstore!(spc, $sub(xi, $mul(xj, Uji)), ($z, i))
         end
       end
     end
@@ -1070,8 +1110,8 @@ end
   WS = static(W)
   # US = static(U)
   quote
-    $(Expr(:meta, :inline))
-    Base.Cartesian.@nif $W w -> m == M - w w -> ldiv_remainder!(
+    # $(Expr(:meta, :inline))
+    Base.Cartesian.@nif $(W - 1) w -> m == M - w w -> _ldiv_remainder!(
       spc,
       spa,
       spu,
@@ -1111,7 +1151,16 @@ function rdiv_U!(
   while m < M - WS + 1
     n = Nr # non factor of W remainder
     if n > 0
-      BdivU_small_kern_u!(spc, nothing, spa, spu, n, StaticInt(1), Val(UNIT))
+      BdivU_small_kern_u!(
+        spc,
+        nothing,
+        spa,
+        spu,
+        n,
+        StaticInt(1),
+        Val(UNIT),
+        WS
+      )
     end
     while n < N - (WU - 1)
       ldiv_solve_W_u!(spc, spa, spu, n, WS, UF, Val(UNIT))
