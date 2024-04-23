@@ -394,14 +394,12 @@ end
       Base.Cartesian.@nexprs $W c ->
         A11_c = vfnmadd_fast(U_ki, vload(spc, (static(c - 1), nk)), A11_c)
     end
-    # Base.Cartesian.@nexprs $W c -> @show A11_c
     # solve AU wants us to transpose
     # We then have column-major multiplies
     # take A[(u-1)*W,u*W), [0,W)]
     X = VectorizationBase.transpose_vecunroll(
       VecUnroll(Base.Cartesian.@ntuple $W A11)
     )
-    # @show X
     C_u = solve_AU(X, spu, n, $(Val(UNIT)))
     vstore!(spc, C_u, $(Unroll{2,1,W,1,W,zero(UInt),1})(($z, n)))
   end
@@ -1018,11 +1016,7 @@ end
     end
   end
 end
-
-# spc = spa / spu
-# spc' = (spu' \ spa')'
-# This is ldiv
-function rdiv_U!(
+@inline function rdiv_U!(
   spc::AbstractStridedPointer{T,2,2},
   spa::AbstractStridedPointer{T,2,2},
   spu::AbstractStridedPointer{T,2,2},
@@ -1030,14 +1024,34 @@ function rdiv_U!(
   N,
   ::Val{UNIT}
 ) where {T,UNIT}
+  tup = (spc, spa, spu)
+  _ldiv_L!(
+    M,
+    N,
+    Val(UNIT),
+    typeof(tup),
+    LoopVectorization.flatten_to_tuple(tup)...
+  )
+end
+
+# spc = spa / spu
+# spc' = (spu' \ spa')'
+# This is ldiv
+function _ldiv_L!(
+  M,
+  N,
+  ::Val{UNIT},
+  ::Type{Args},
+  args::Vararg{Any,K}
+) where {UNIT,Args,K}
+  spc, spa, spu = LoopVectorization.reassemble_tuple(Args, args)
+  T = eltype(spc)
   WS = pick_vector_width(T)
   W = Int(WS)
   UF = unroll_factor(WS)
   WU = UF * WS
-  MU = UF > 1 ? M : 0
   Nd, Nr = VectorizationBase.vdivrem(N, WS)
   m = 0
-  # @show M,N
   # m, no remainder
   while m < M - WS + 1
     n = Nr # non factor of W remainder
