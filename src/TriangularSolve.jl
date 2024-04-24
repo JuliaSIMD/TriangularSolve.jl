@@ -48,12 +48,13 @@ using Polyester
 end
 
 @generated function BdivU_small_kern!(
-  spa::AbstractStridedPointer{T},
-  spu::AbstractStridedPointer{T},
   ::StaticInt{N},
-  mask::AbstractMask{W},
-  ::Val{UNIT}
-) where {T,UNIT,W,N}
+  _mask::UInt32,
+  ::StaticInt{W},
+  ::Val{UNIT},
+  ::Type{Args},
+  args::Vararg{Any,K}
+) where {UNIT,W,N,Args,K}
   z = static(0)
   if N == 1
     i = (MM{W}(z), z)
@@ -63,6 +64,8 @@ end
     end
     quote
       $(Expr(:meta, :inline))
+      mask = $(VectorizationBase.Mask{W})(_mask)
+      spa, spu = LoopVectorization.reassemble_tuple($Args, args)
       vstore!(spa, $Amn, $i, mask)
     end
   else
@@ -71,6 +74,8 @@ end
     scale = UNIT ? nothing : :(Amn_n /= vload(spu, (n - 1, n - 1)))
     quote
       $(Expr(:meta, :inline))
+      spa, spu = LoopVectorization.reassemble_tuple($Args, args)
+      mask = $(VectorizationBase.Mask{W})(_mask)
       Amn = getfield(vload(spa, $unroll, mask), :data)
       Base.Cartesian.@nexprs $N n -> begin
         Amn_n = getfield(Amn, n)
@@ -83,14 +88,29 @@ end
     end
   end
 end
+@generated function BdivU_small_kern!(
+  Nr::Int,
+  mask::UInt32,
+  ::StaticInt{W},
+  ::Val{UNIT},
+  ::Type{Args},
+  args::Vararg{Any,K}
+) where {UNIT,W,Args,K}
+  WS = static(W)
+  quote
+    # $(Expr(:meta, :inline))
+    Base.Cartesian.@nif $(W - 1) n -> n == Nr n ->
+      BdivU_small_kern!(static(n), mask, $WS, $(Val(UNIT)), $Args, args...)
+  end
+end
 @generated function BdivU_small_kern_u!(
-  spa::AbstractStridedPointer{T},
-  spu::AbstractStridedPointer{T},
   ::StaticInt{N},
   ::StaticInt{U},
   ::Val{UNIT},
-  ::StaticInt{W}
-) where {T,U,UNIT,N,W}
+  ::StaticInt{W},
+  ::Type{Args},
+  args::Vararg{Any,K}
+) where {U,UNIT,N,W,Args,K}
   z = static(0)
   if N == 1
     unroll = Unroll{1,W,U,1,W,zero(UInt),1}((z, z))
@@ -100,6 +120,7 @@ end
     end
     quote
       $(Expr(:meta, :inline))
+      spa, spu = LoopVectorization.reassemble_tuple($Args, args)
       vstore!(spa, $Amn, $unroll)
     end
   else
@@ -109,6 +130,7 @@ end
     scale = UNIT ? nothing : :(Amn_n /= vload(spu, (n - 1, n - 1)))
     quote
       $(Expr(:meta, :inline))
+      spa, spu = LoopVectorization.reassemble_tuple($Args, args)
       Amn = getfield(vload(spa, $double_unroll), :data)
       Base.Cartesian.@nexprs $N n -> begin
         Amn_n = getfield(Amn, n)
@@ -121,34 +143,22 @@ end
     end
   end
 end
-@generated function BdivU_small_kern!(
-  spa::AbstractStridedPointer{T},
-  spu::AbstractStridedPointer{T},
-  Nr::Int,
-  mask::AbstractMask{W},
-  ::Val{UNIT}
-) where {T,UNIT,W}
-  quote
-    # $(Expr(:meta, :inline))
-    Base.Cartesian.@nif $(W - 1) n -> n == Nr n ->
-      BdivU_small_kern!(spa, spu, static(n), mask, $(Val(UNIT)))
-  end
-end
+
 @generated function BdivU_small_kern_u!(
-  spa::AbstractStridedPointer{T},
-  spu::AbstractStridedPointer{T},
   Nr::Int,
   ::StaticInt{U},
   ::Val{UNIT},
-  ::StaticInt{W}
-) where {T,U,UNIT,W}
+  ::StaticInt{W},
+  ::Type{Args},
+  args::Vararg{Any,K}
+) where {U,UNIT,W,Args,K}
   su = static(U)
   vu = Val(UNIT)
   sw = static(W)
   quote
     # $(Expr(:meta, :inline))
     Base.Cartesian.@nif $(W - 1) n -> n == Nr n ->
-      BdivU_small_kern_u!(spa, spu, static(n), $su, $vu, $sw)
+      BdivU_small_kern_u!(static(n), $su, $vu, $sw, $Args, args...)
   end
 end
 
@@ -364,6 +374,7 @@ end
     vstore!(spa, C_u, $(Unroll{2,1,W,1,W,zero(UInt),1})(($z, n)))
   end
 end
+@inline _mask(x, y) = VectorizationBase.Mask(VectorizationBase.mask(x, y))
 @generated function ldiv_solve_W!(
   spa,
   spu,
@@ -431,7 +442,7 @@ end
     end
   else
     quote
-      mask = VectorizationBase.mask($(static(Wpad)), $(static(R)))
+      mask = _mask($(static(Wpad)), $(static(R)))
       i = $(Unroll{2,1,W,1,Wpad,(-1 % UInt),1})(($z, n))
       vstore!(spa, C_u, i, mask)
     end
@@ -457,7 +468,9 @@ end
     while m < M - WU + 1
       n = Nr
       if n > 0
-        BdivU_small_kern_u!(spa, spu, n, UF, Val(UNIT), WS)
+        let t = (spa, spu), ft = LoopVectorization.flatten_to_tuple(t)
+          BdivU_small_kern_u!(n, UF, Val(UNIT), WS, typeof(t), ft...)
+        end
       end
       for _ ∈ 1:Nd
         rdiv_solve_W_u!(spa, spu, n, WS, UF, Val(UNIT))
@@ -467,14 +480,19 @@ end
       spa = gesp(spa, (WU, StaticInt(0)))
     end
   end
-  finalmask = VectorizationBase.mask(WS, M)
+  finalmask = _mask(WS, M)
   while m < M
     ubm = m + W
     nomaskiter = ubm < M
     mask = nomaskiter ? VectorizationBase.max_mask(WS) : finalmask
     n = Nr
     if n > 0
-      BdivU_small_kern!(spa, spu, n, mask, Val(UNIT))
+      let t = (spa, spu),
+        ft = LoopVectorization.flatten_to_tuple(t),
+        mask = getfield(mask, :u) % UInt32
+
+        BdivU_small_kern!(n, mask, WS, Val(UNIT), typeof(t), ft...)
+      end
     end
     for _ ∈ 1:Nd
       rdiv_solve_W!(spa, spu, n, mask, Val(UNIT))
@@ -596,12 +614,7 @@ function ldiv!(
   A::AbstractMatrix{T},
   ::Val{false}
 ) where {T<:Union{Float32,Float64}}
-  div_dispatch!(
-    transpose(A),
-    transpose(parent(U)),
-    static(1),
-    Val(false)
-  )
+  div_dispatch!(transpose(A), transpose(parent(U)), static(1), Val(false))
   return A
 end
 function ldiv!(
@@ -611,7 +624,7 @@ function ldiv!(
   ::Val{true} = Val(true)
 ) where {T<:Union{Float32,Float64}}
   div_dispatch!(
-    transpose(copyto!(C,A)),
+    transpose(copyto!(C, A)),
     transpose(parent(U)),
     _nthreads(),
     Val(false)
@@ -625,7 +638,7 @@ function ldiv!(
   ::Val{false}
 ) where {T<:Union{Float32,Float64}}
   div_dispatch!(
-    transpose(copyto!(C,A)),
+    transpose(copyto!(C, A)),
     transpose(parent(U)),
     static(1),
     Val(false)
@@ -637,12 +650,7 @@ function ldiv!(
   A::AbstractMatrix{T},
   ::Val{true} = Val(true)
 ) where {T<:Union{Float32,Float64}}
-  div_dispatch!(
-    transpose(A),
-    transpose(parent(U)),
-    _nthreads(),
-    Val(true)
-  )
+  div_dispatch!(transpose(A), transpose(parent(U)), _nthreads(), Val(true))
   return A
 end
 function ldiv!(
@@ -650,12 +658,7 @@ function ldiv!(
   A::AbstractMatrix{T},
   ::Val{false}
 ) where {T<:Union{Float32,Float64}}
-  div_dispatch!(
-    transpose(A),
-    transpose(parent(U)),
-    static(1),
-    Val(true)
-  )
+  div_dispatch!(transpose(A), transpose(parent(U)), static(1), Val(true))
   return A
 end
 function ldiv!(
@@ -665,7 +668,7 @@ function ldiv!(
   ::Val{true} = Val(true)
 ) where {T<:Union{Float32,Float64}}
   div_dispatch!(
-    transpose(copyto!(C,A)),
+    transpose(copyto!(C, A)),
     transpose(parent(U)),
     _nthreads(),
     Val(true)
@@ -679,7 +682,7 @@ function ldiv!(
   ::Val{false}
 ) where {T<:Union{Float32,Float64}}
   div_dispatch!(
-    transpose(copyto!(C,A)),
+    transpose(copyto!(C, A)),
     transpose(parent(U)),
     static(1),
     Val(true)
@@ -827,9 +830,7 @@ end
 @generated function _ldiv_remainder!(
   spa,
   spu,
-  M,
   N,
-  m,
   Nr,
   ::StaticInt{W},
   ::Val{UNIT},
@@ -868,8 +869,12 @@ end
       $(Expr(:meta, :inline))
       n = Nr # non factor of W remainder
       if n > 0
-        mask = $(VectorizationBase.mask(WS, r))
-        BdivU_small_kern!(spa, spu, n, mask, $(Val(UNIT)))
+        let t = (spa, spu),
+          ft = LoopVectorization.flatten_to_tuple(t),
+          mask = $(getfield(_mask(WS, r), :u) % UInt32)
+
+          BdivU_small_kern!(n, mask, $WS, $(Val(UNIT)), typeof(t), ft...)
+        end
       end
       # while n < N - $(W * U - 1)
       #   ldiv_solve_W_u!(spa, spa, spu, n, $WS, $US, Val(UNIT), Val(r))
@@ -883,28 +888,111 @@ end
   end
 end
 @generated function ldiv_remainder!(
-  spa,
-  spu,
   M,
   N,
   m,
   Nr,
   ::StaticInt{W},
   # ::Val{U},
-  ::Val{UNIT}
-) where {W,UNIT}
+  ::Val{UNIT},
+  ::Type{Args},
+  args...
+) where {W,UNIT,Args}
   WS = static(W)
   # US = static(U)
   if W == 2
     quote
       $(Expr(:meta, :inline))
-      _ldiv_remainder!(spa, spu, M, N, m, Nr, $WS, $(Val(UNIT)), $(static(1)))
+      spa, spu = LoopVectorization.reassemble_tuple(Args, args)
+      _ldiv_remainder!(spa, spu, N, Nr, $WS, $(Val(UNIT)), $(static(1)))
+      nothing
+    end
+  elseif W == 8
+    quote
+      # $(Expr(:meta, :inline))
+      spa, spu = LoopVectorization.reassemble_tuple(Args, args)
+      if m == M - 1
+        _ldiv_remainder!(spa, spu, N, Nr, static(8), $(Val(UNIT)), StaticInt(1))
+      else
+        if m == M - 2
+          _ldiv_remainder!(
+            spa,
+            spu,
+            N,
+            Nr,
+            static(8),
+            $(Val(UNIT)),
+            StaticInt(2)
+          )
+        else
+          if m == M - 3
+            _ldiv_remainder!(
+              spa,
+              spu,
+              N,
+              Nr,
+              static(8),
+              $(Val(UNIT)),
+              StaticInt(3)
+            )
+          else
+            if m == M - 4
+              _ldiv_remainder!(
+                spa,
+                spu,
+                N,
+                Nr,
+                static(8),
+                $(Val(UNIT)),
+                StaticInt(4)
+              )
+            else
+              if m == M - 5
+                _ldiv_remainder!(
+                  spa,
+                  spu,
+                  N,
+                  Nr,
+                  static(8),
+                  $(Val(UNIT)),
+                  StaticInt(5)
+                )
+              else
+                if m == M - 6
+                  _ldiv_remainder!(
+                    spa,
+                    spu,
+                    N,
+                    Nr,
+                    static(8),
+                    $(Val(UNIT)),
+                    StaticInt(6)
+                  )
+                else
+                  _ldiv_remainder!(
+                    spa,
+                    spu,
+                    N,
+                    Nr,
+                    static(8),
+                    $(Val(UNIT)),
+                    StaticInt(7)
+                  )
+                end
+              end
+            end
+          end
+        end
+      end
+      nothing
     end
   else
     quote
       # $(Expr(:meta, :inline))
+      spa, spu = LoopVectorization.reassemble_tuple(Args, args)
       Base.Cartesian.@nif $(W - 1) w -> m == M - w w ->
-        _ldiv_remainder!(spa, spu, M, N, m, Nr, $WS, $(Val(UNIT)), StaticInt(w))
+        _ldiv_remainder!(spa, spu, N, Nr, $WS, $(Val(UNIT)), static(w))
+      nothing
     end
   end
 end
@@ -916,13 +1004,8 @@ end
   ::Val{UNIT}
 ) where {T,UNIT}
   tup = (spa, spu)
-  _ldiv_L!(
-    M,
-    N,
-    Val(UNIT),
-    typeof(tup),
-    LoopVectorization.flatten_to_tuple(tup)...
-  )
+  ftup = LoopVectorization.flatten_to_tuple(tup)
+  _ldiv_L!(M, N, Val(UNIT), typeof(tup), ftup...)
 end
 
 # spc = spa / spu
@@ -941,13 +1024,15 @@ function _ldiv_L!(
   W = Int(WS)
   UF = unroll_factor(WS)
   WU = UF * WS
-  Nd, Nr = VectorizationBase.vdivrem(N, WS)
+  Nr = VectorizationBase.vrem(N, WS)
   m = 0
   # m, no remainder
   while m < M - WS + 1
     n = Nr # non factor of W remainder
     if n > 0
-      BdivU_small_kern_u!(spa, spu, n, StaticInt(1), Val(UNIT), WS)
+      let t = (spa, spu), ft = LoopVectorization.flatten_to_tuple(t)
+        BdivU_small_kern_u!(n, StaticInt(1), Val(UNIT), WS, typeof(t), ft...)
+      end
     end
     while n < N - (WU - 1)
       ldiv_solve_W_u!(spa, spu, n, WS, UF, Val(UNIT))
@@ -961,7 +1046,11 @@ function _ldiv_L!(
     spa = gesp(spa, (W, StaticInt(0)))
   end
   # remainder on `m`
-  m < M && ldiv_remainder!(spa, spu, M, N, m, Nr, WS, Val(UNIT))
+  if m < M
+    let tup = (spa, spu), ftup = LoopVectorization.flatten_to_tuple(tup)
+      ldiv_remainder!(M, N, m, Nr, WS, Val(UNIT), typeof(tup), ftup...)
+    end
+  end
   nothing
 end
 
