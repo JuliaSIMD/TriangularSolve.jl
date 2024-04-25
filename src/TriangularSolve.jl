@@ -19,6 +19,7 @@ using Static
 using IfElse: ifelse
 using LoopVectorization
 using Polyester
+using StaticArrayInterface
 
 const LPtr{T} = Core.LLVMPtr{T,0}
 _lptr(x::Ptr{T}) where {T} = reinterpret(LPtr{T}, x)
@@ -718,8 +719,24 @@ struct Mat{T,ColMajor} <: AbstractMatrix{T}
 end
 Base.size(A::Mat) = (A.M, A.N)
 Base.axes(A::Mat) = (CloseOpen(A.M), CloseOpen(A.N))
+Base.strides(A::Mat{T,true}) where {T} = (1, getfield(A, :x))
+Base.strides(A::Mat{T,false}) where {T} = (getfield(A, :x), 1)
 Base.transpose(A::Mat{T,true}) where {T} = Mat{T,false}(A.p, A.x, A.N, A.M)
 Base.transpose(A::Mat{T,false}) where {T} = Mat{T,true}(A.p, A.x, A.N, A.M)
+Base.pointer(A::Mat) = getfield(A, :p)
+StaticArrayInterface.device(::Mat) = StaticArrayInterface.CPUPointer()
+StaticArrayInterface.static_strides(A::Mat{T,true}) where {T} =
+  (static(1), getfield(A, :x))
+StaticArrayInterface.static_strides(A::Mat{T,false}) where {T} =
+  (getfield(A, :x), static(1))
+StaticArrayInterface.offsets(::Mat) = (static(0), static(0))
+StaticArrayInterface.stride_rank(::Type{<:Mat{<:Any,true}}) = (static(1), static(2))
+StaticArrayInterface.stride_rank(::Type{<:Mat{<:Any,false}}) = (static(2), static(1))
+StaticArrayInterface.contiguous_batch_size(::Type{<:Mat}) = static(0)
+StaticArrayInterface.dense_dims(::Type{<:Mat{<:Any,true}}) = (static(true),static(false))
+StaticArrayInterface.dense_dims(::Type{<:Mat{<:Any,false}}) = (static(false),static(true))
+StaticArrayInterface.contiguous_axis(::Type{<:Mat{<:Any,true}}) = static(1)
+StaticArrayInterface.contiguous_axis(::Type{<:Mat{<:Any,false}}) = static(2)
 @inline function Base.getindex(
   A::Mat{T,ColMajor},
   i::Int,
