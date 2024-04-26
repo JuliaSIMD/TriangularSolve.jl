@@ -537,7 +537,9 @@ function div_dispatch!(
     if nthread > 1
       (M > mtb) && return multithread_rdiv!(spa, spu, M, N, mtb, Val(UNIT))
     elseif N > block_size(Val(T))
-      return rdiv_block_MandN!(spa, spu, M, N, Val(UNIT))
+      let tup = (spa, spu), ftup = flatten_to_tup(tup)
+        return rdiv_block_MandN!(M, N, Val(UNIT), typeof(tup), ftup...)
+      end
     end
     return rdiv_U!(spa, spu, M, N, Val(UNIT))
   end
@@ -1042,8 +1044,8 @@ end
   # ::Val{U},
   ::Val{UNIT},
   ::Type{Args},
-  args...
-) where {W,UNIT,Args}
+  args::Vararg{Any,K}
+) where {W,UNIT,Args,K}
   WS = static(W)
   # US = static(U)
   if W == 2
