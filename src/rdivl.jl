@@ -276,6 +276,177 @@ end
   end
   nothing
 end
+@generated function _ldivu_remainder!(
+  spa,
+  spu,
+  N,
+  Nr,
+  ::StaticInt{W},
+  ::Val{UNIT},
+  ::StaticInt{r}
+) where {W,UNIT,r}
+  error("not updated")
+  r <= 0 && throw("Remainder of `<= 0` shouldn't be called, but had $r.")
+  r >= W && throw("Reaminderof `>= $W` shouldn't be called, but had $r.")
+  if r == 1
+    z = static(0)
+    sub = Base.FastMath.sub_fast
+    mul = Base.FastMath.mul_fast
+    div = Base.FastMath.div_fast
+    vlxj = :(vload(spa, ($z, j)))
+    if UNIT
+      vlxj = :(xj = $vlxj)
+    else
+      vlxj = quote
+        xj = $div($vlxj, vload(spu, (j, j)))
+        vstore!(spa, xj, ($z, j))
+      end
+    end
+    quote
+      $(Expr(:meta, :inline))
+      for j = 0:N-1
+        $vlxj
+        for i = (j+1):N-1
+          xi = vload(spa, ($z, i))
+          Uji = vload(spu, (j, i))
+          vstore!(spa, $sub(xi, $mul(xj, Uji)), ($z, i))
+        end
+      end
+    end
+  else
+    WS = static(W)
+    quote
+      $(Expr(:meta, :inline))
+      n = Nr # non factor of W remainder
+      if n > 0
+        let t = (spa, spu),
+          ft = flatten_to_tup(t),
+          mask = $(getfield(_mask(WS, r), :u) % UInt32)
+
+          BdivU_small_kern!(n, mask, $WS, $(Val(UNIT)), typeof(t), ft...)
+        end
+      end
+      # while n < N - $(W * U - 1)
+      #   ldivu_solve_W_u!(spa, spa, spu, n, $WS, $US, Val(UNIT), Val(r))
+      #   n += $(W * U)
+      # end
+      while n != N
+        ldivu_solve_W!(spa, spu, n, $WS, $(Val(UNIT)), $(StaticInt(r)))
+        n += $W
+      end
+    end
+  end
+end
+@generated function ldivu_remainder!(
+  M,
+  N,
+  m,
+  Nr,
+  ::StaticInt{W},
+  # ::Val{U},
+  ::Val{UNIT},
+  ::Type{Args},
+  args::Vararg{Any,K}
+) where {W,UNIT,Args,K}
+  error("not updated")
+  WS = static(W)
+  # US = static(U)
+  if W == 2
+    quote
+      $(Expr(:meta, :inline))
+      spa, spu = reassemble_tup(Args, args)
+      _ldivu_remainder!(spa, spu, N, Nr, $WS, $(Val(UNIT)), $(static(1)))
+      nothing
+    end
+  elseif W == 8
+    quote
+      # $(Expr(:meta, :inline))
+      spa, spu = reassemble_tup(Args, args)
+      if m == M - 1
+        _ldivu_remainder!(spa, spu, N, Nr, static(8), $(Val(UNIT)), StaticInt(1))
+      else
+        if m == M - 2
+          _ldivu_remainder!(
+            spa,
+            spu,
+            N,
+            Nr,
+            static(8),
+            $(Val(UNIT)),
+            StaticInt(2)
+          )
+        else
+          if m == M - 3
+            _ldivu_remainder!(
+              spa,
+              spu,
+              N,
+              Nr,
+              static(8),
+              $(Val(UNIT)),
+              StaticInt(3)
+            )
+          else
+            if m == M - 4
+              _ldivu_remainder!(
+                spa,
+                spu,
+                N,
+                Nr,
+                static(8),
+                $(Val(UNIT)),
+                StaticInt(4)
+              )
+            else
+              if m == M - 5
+                _ldivu_remainder!(
+                  spa,
+                  spu,
+                  N,
+                  Nr,
+                  static(8),
+                  $(Val(UNIT)),
+                  StaticInt(5)
+                )
+              else
+                if m == M - 6
+                  _ldivu_remainder!(
+                    spa,
+                    spu,
+                    N,
+                    Nr,
+                    static(8),
+                    $(Val(UNIT)),
+                    StaticInt(6)
+                  )
+                else
+                  _ldivu_remainder!(
+                    spa,
+                    spu,
+                    N,
+                    Nr,
+                    static(8),
+                    $(Val(UNIT)),
+                    StaticInt(7)
+                  )
+                end
+              end
+            end
+          end
+        end
+      end
+      nothing
+    end
+  else
+    quote
+      # $(Expr(:meta, :inline))
+      spa, spu = reassemble_tup(Args, args)
+      Base.Cartesian.@nif $(W - 1) w -> m == M - w w ->
+        _ldivu_remainder!(spa, spu, N, Nr, $WS, $(Val(UNIT)), static(w))
+      nothing
+    end
+  end
+end
 function _ldivu_L!(
   M,
   N,
@@ -301,11 +472,11 @@ function _ldivu_L!(
       end
     end
     while n < N - (WU - 1)
-      ldivl_solve_W_u!(spa, spl, n, WS, UF, Val(UNIT))
+      ldivu_solve_W_u!(spa, spl, n, WS, UF, Val(UNIT))
       n += WU
     end
     while n != N
-      ldivl_solve_W!(spa, spl, n, WS, Val(UNIT))
+      ldivu_solve_W!(spa, spl, n, WS, Val(UNIT))
       n += W
     end
     m += W
@@ -314,7 +485,7 @@ function _ldivu_L!(
   # remainder on `m`
   if m < M
     let tup = (spa, spl), ftup = flatten_to_tup(tup)
-      ldivl_remainder!(M, N, m, Nr, WS, Val(UNIT), typeof(tup), ftup...)
+      ldivu_remainder!(M, N, m, Nr, WS, Val(UNIT), typeof(tup), ftup...)
     end
   end
   nothing
