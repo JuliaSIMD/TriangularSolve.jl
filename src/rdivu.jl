@@ -161,25 +161,18 @@ end
     # Actually: (A_{i+[0,W*U), j+[0,W)}):
     # outer unroll are `W` columns
     # Inner unroll are `W*U` rows (U simd vecs)
-    C11 = VectorizationBase.data(
-      vload(
-        spa,
-        $(Unroll{2,1,W,1,W,zero(UInt),1})(
-          $(Unroll{1,W,U,1,W,zero(UInt),1})(($z, n))
-        )
-      )
+    i = $(Unroll{2,1,W,1,W,zero(UInt),1})(
+      $(Unroll{1,W,U,1,W,zero(UInt),1})(($z, n))
     )
+    C11 = VectorizationBase.data(vload(spa, i))
     Base.Cartesian.@nexprs $W c -> C11_c = C11[c]
     for nk ∈ SafeCloseOpen(n) # nmuladd
-      A11 = vload(spa, $(Unroll{1,W,U,1,W,zero(UInt),1})(($(StaticInt(0)), nk)))
+      A11 = vload(spa, $(Unroll{1,W,U,1,W,zero(UInt),1})(($z, nk)))
       Base.Cartesian.@nexprs $W c ->
         C11_c = vfnmadd_fast(A11, vload(spu, (nk, n + (c - 1))), C11_c)
     end
     C11vu =
       solve_AU(VecUnroll((Base.Cartesian.@ntuple $W C11)), spu, n, $(Val(UNIT)))
-    i = $(Unroll{2,1,W,1,W,zero(UInt),1})(
-      $(Unroll{1,W,U,1,W,zero(UInt),1})(($z, n))
-    )
     vstore!(spa, C11vu, i)
   end
 end
@@ -194,9 +187,8 @@ end
   quote
     $(Expr(:meta, :inline))
     # here, we just want to load the vectors
-    C11 = VectorizationBase.data(
-      vload(spa, $(Unroll{2,1,W,1,W,(-1 % UInt),1})(($z, n)), mask)
-    )
+    i = $(Unroll{2,1,W,1,W,(-1 % UInt),1})(($z, n))
+    C11 = VectorizationBase.data(vload(spa, i, mask))
     Base.Cartesian.@nexprs $W c -> C11_c = C11[c]
     for nk ∈ SafeCloseOpen(n) # nmuladd
       A11 = vload(spa, ($(MM{W}(z)), nk), mask)
@@ -205,7 +197,6 @@ end
     end
     C11 = VecUnroll((Base.Cartesian.@ntuple $W C11))
     C11 = solve_AU(C11, spu, n, $(Val(UNIT)))
-    i = $(Unroll{2,1,W,1,W,(-1 % UInt),1})(($z, n))
     vstore!(spa, C11, i, mask)
   end
 end
@@ -461,11 +452,12 @@ end
       spa = gesp(spa, (WU, StaticInt(0)))
     end
   end
-  finalmask = _mask(WS, M)
+  finalmask = UInt32(getfield(_mask(WS, M), :u))
+  maxmask = UInt32(getfield(VectorizationBase.max_mask(WS), :u))
   while m < M
     ubm = m + W
     nomaskiter = ubm < M
-    mask = nomaskiter ? VectorizationBase.max_mask(WS) : finalmask
+    mask = nomaskiter ? maxmask : finalmask
     n = Nr
     if n > 0
       let t = (spa, spu),
@@ -511,7 +503,6 @@ function div_dispatch!(
     return rdivu_U!(spa, spu, M, N, Val(UNIT))
   end
 end
-
 
 function rdivu_block_N!(
   M,
@@ -586,7 +577,6 @@ function rdivu_block_MandN!(
   end
   nothing
 end
-
 
 struct RDivBlockMandNv2{UNIT} end
 function (f::RDivBlockMandNv2{UNIT})(
@@ -719,7 +709,15 @@ end
       # $(Expr(:meta, :inline))
       spa, spu = reassemble_tup(Args, args)
       if m == M - 1
-        _ldivl_remainder!(spa, spu, N, Nr, static(8), $(Val(UNIT)), StaticInt(1))
+        _ldivl_remainder!(
+          spa,
+          spu,
+          N,
+          Nr,
+          static(8),
+          $(Val(UNIT)),
+          StaticInt(1)
+        )
       else
         if m == M - 2
           _ldivl_remainder!(
@@ -860,7 +858,6 @@ function _ldivl_L!(
   end
   nothing
 end
-
 
 function rdiv!(
   A::AbstractMatrix{T},
@@ -1018,4 +1015,3 @@ function ldiv!(
   )
   return C
 end
-
