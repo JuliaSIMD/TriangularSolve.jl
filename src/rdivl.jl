@@ -268,7 +268,13 @@ end
     for _ ∈ 1:Nd
       k = N - n
       n -= W
-      rdivl_solve_W!(gesp(spa, (z, n)), gesp(spl, (n, n)), k, mask, Val(UNIT))
+      rdivl_solve_W!(
+        gesp(spa, (z, n)),
+        gesp(spl, (n, n)),
+        k,
+        Mask{W}(mask),
+        Val(UNIT)
+      )
     end
     spa = gesp(spa, (WS, StaticInt(0)))
     m = ubm
@@ -602,6 +608,7 @@ end
     end
   end
 end
+# B_{n,m} = (A_{n,m} - \sum_{i=n+1}^N U_{n,i}B_{i,m})/U_{n,n}
 function _ldivu_L!(
   M,
   N,
@@ -616,10 +623,35 @@ function _ldivu_L!(
   W = Int(WS)
   UF = unroll_factor(WS)
   WU = UF * WS
-  Nr = VectorizationBase.vrem(N, WS)
+# for ldiv, we unroll over `n`
+  Nd, Nr = VectorizationBase.vdivrem(N, WS)
+  z = StaticInt(0)
   m = 0
   # m, no remainder
   while m < M - WS + 1
+    n = Int(Nd * W)::Int
+    if Nr > 0
+      let t = (gesp(spa, (n, z)), gesp(spl, (n, n))), ft = flatten_to_tup(t)
+        BdivL_small_kern_u!(Nr, StaticInt(1), Val(UNIT), WS, typeof(t), ft...)
+      end
+    end
+    for _ ∈ 1:Nd
+      k = N - n
+      n -= W
+      ldivu_solve_W_u!(
+        gesp(spa, (n, z)),
+        gesp(spl, (n, n)),
+        k,
+        WS,
+        UF,
+        Val(UNIT)
+      )
+    end
+    while n < N - (WU - 1)
+      ldivu_solve_W_u!(spa, spl, n, WS, UF, Val(UNIT))
+      n += WU
+    end
+
     n = Nr # non factor of W remainder
     if n > 0
       let t = (spa, spl), ft = flatten_to_tup(t)
@@ -635,7 +667,7 @@ function _ldivu_L!(
       n += W
     end
     m += W
-    spa = gesp(spa, (W, StaticInt(0)))
+    spa = gesp(spa, (W, z))
   end
   # remainder on `m`
   if m < M
@@ -803,8 +835,7 @@ function ldiv!(
 end
 function ldiv!(
   U::UnitUpperTriangular{T},
-  A::AbstractMatrix{T},
-  ::Val{false}
+  A::AbstractMatrix{T}
 ) where {T<:Union{Float32,Float64}}
   rdivl_dispatch!(transpose(A), transpose(parent(U)), Val(true))
   return A
@@ -813,6 +844,75 @@ function ldiv!(
   C::AbstractMatrix{T},
   U::UnitUpperTriangular{T},
   A::AbstractMatrix{T}
+) where {T<:Union{Float32,Float64}}
+  rdivl_dispatch!(transpose(copyto!(C, A)), transpose(parent(U)), Val(true))
+  return C
+end
+
+function rdiv!(
+  A::AbstractMatrix{T},
+  U::LowerTriangular{T},
+  ::Val
+) where {T<:Union{Float32,Float64}}
+  rdivl_dispatch!(A, parent(U), Val(false))
+  return A
+end
+function rdiv!(
+  C::AbstractMatrix{T},
+  A::AbstractMatrix{T},
+  U::LowerTriangular{T},
+  ::Val
+) where {T<:Union{Float32,Float64}}
+  rdivl_dispatch!(copyto!(C, A), parent(U), Val(false))
+  return C
+end
+function rdiv!(
+  A::AbstractMatrix{T},
+  U::UnitLowerTriangular{T},
+  ::Val
+) where {T<:Union{Float32,Float64}}
+  rdivl_dispatch!(A, parent(U), Val(true))
+  return A
+end
+function rdiv!(
+  C::AbstractMatrix{T},
+  A::AbstractMatrix{T},
+  U::UnitLowerTriangular{T},
+  ::Val
+) where {T<:Union{Float32,Float64}}
+  rdivl_dispatch!(copyto!(C, A), parent(U), Val(true))
+  return C
+end
+function ldiv!(
+  U::UpperTriangular{T},
+  A::AbstractMatrix{T},
+  ::Val
+) where {T<:Union{Float32,Float64}}
+  rdivl_dispatch!(transpose(A), transpose(parent(U)), Val(false))
+  return A
+end
+function ldiv!(
+  C::AbstractMatrix{T},
+  U::UpperTriangular{T},
+  A::AbstractMatrix{T},
+  ::Val
+) where {T<:Union{Float32,Float64}}
+  rdivl_dispatch!(transpose(copyto!(C, A)), transpose(parent(U)), Val(false))
+  return C
+end
+function ldiv!(
+  U::UnitUpperTriangular{T},
+  A::AbstractMatrix{T},
+  ::Val
+) where {T<:Union{Float32,Float64}}
+  rdivl_dispatch!(transpose(A), transpose(parent(U)), Val(true))
+  return A
+end
+function ldiv!(
+  C::AbstractMatrix{T},
+  U::UnitUpperTriangular{T},
+  A::AbstractMatrix{T},
+  ::Val
 ) where {T<:Union{Float32,Float64}}
   rdivl_dispatch!(transpose(copyto!(C, A)), transpose(parent(U)), Val(true))
   return C

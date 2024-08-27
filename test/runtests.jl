@@ -26,16 +26,18 @@ function test_solve(::Type{T}) where {T}
       B .= rand.(T)
       @view(B[diagind(B)]) .+= one(T)
 
-      @test TriangularSolve.rdiv!(res, A, UpperTriangular(B)) *
-            UpperTriangular(B) ≈ A
-      @test TriangularSolve.rdiv!(res, A, UnitUpperTriangular(B)) *
-            UnitUpperTriangular(B) ≈ A
-      @test TriangularSolve.rdiv!(res, A, UpperTriangular(B), Val(false)) *
-            UpperTriangular(B) ≈ A
-      @test TriangularSolve.rdiv!(res, A, UnitUpperTriangular(B), Val(false)) *
-            UnitUpperTriangular(B) ≈ A
+      for C in (
+        UpperTriangular(B),
+        UnitUpperTriangular(B),
+        LowerTriangular(B),
+        UnitLowerTriangular(B)
+      )
+        @test TriangularSolve.rdiv!(res, A, C) * C ≈ A
+        check_box_for_nans(RR, m, n)
+        @test TriangularSolve.rdiv!(res, A, C, Val(false)) * C ≈ A
+        check_box_for_nans(RR, m, n)
+      end
 
-      check_box_for_nans(RR, m, n)
       res .= NaN
       A .= NaN
 
@@ -43,16 +45,18 @@ function test_solve(::Type{T}) where {T}
       res = @view RR[17:16+n, 17:16+m]
       A .= rand.(T)
 
-      @test LowerTriangular(B) *
-            TriangularSolve.ldiv!(res, LowerTriangular(B), A) ≈ A
-      @test UnitLowerTriangular(B) *
-            TriangularSolve.ldiv!(res, UnitLowerTriangular(B), A) ≈ A
-      @test LowerTriangular(B) *
-            TriangularSolve.ldiv!(res, LowerTriangular(B), A, Val(false)) ≈ A
-      @test UnitLowerTriangular(B) *
-            TriangularSolve.ldiv!(res, UnitLowerTriangular(B), A, Val(false)) ≈
-            A
-      check_box_for_nans(RR, n, m)
+      for C in (
+        UpperTriangular(B),
+        UnitUpperTriangular(B),
+        LowerTriangular(B),
+        UnitLowerTriangular(B)
+      )
+        @test C * TriangularSolve.ldiv!(res, C, A) ≈ A
+        check_box_for_nans(RR, n, m)
+        @test C * TriangularSolve.ldiv!(res, C, A, Val(false)) ≈ A
+        check_box_for_nans(RR, n, m)
+      end
+
       res .= NaN
       A .= NaN
       B .= NaN

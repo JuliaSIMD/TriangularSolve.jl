@@ -256,7 +256,7 @@ end
     # So, we'll use `U = 1`, and transpose blocks
     # We then have column-major multiplies
     Base.Cartesian.@nexprs $U u -> begin
-      # take A[(u-1)*W,u*W), [0,W)]
+      # take A[[(u-1)*W,u*W), [0,W)]
       X_u = getfield(
         VectorizationBase.transpose_vecunroll(
           VecUnroll(
@@ -460,15 +460,12 @@ end
     mask = nomaskiter ? maxmask : finalmask
     n = Nr
     if n > 0
-      let t = (spa, spu),
-        ft = flatten_to_tup(t),
-        mask = getfield(mask, :u) % UInt32
-
+      let t = (spa, spu), ft = flatten_to_tup(t)
         BdivU_small_kern!(n, mask, WS, Val(UNIT), typeof(t), ft...)
       end
     end
     for _ ∈ 1:Nd
-      rdivu_solve_W!(spa, spu, n, mask, Val(UNIT))
+      rdivu_solve_W!(spa, spu, n, Mask{W}(mask), Val(UNIT))
       n += W
     end
     spa = gesp(spa, (WS, StaticInt(0)))
