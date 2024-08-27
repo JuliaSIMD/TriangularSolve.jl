@@ -18,7 +18,7 @@ function test_solve(::Type{T}) where {T}
   for n ∈ 1:maxN
     @show n
     for m ∈ max(1, n - 10):n+10
-      @show m
+      # @show m
       A = @view AA[17:16+m, 17:16+n]
       res = @view RR[17:16+m, 17:16+n]
       B = @view BB[17:16+n, 17:16+n]
@@ -30,10 +30,10 @@ function test_solve(::Type{T}) where {T}
       for C in (
         UpperTriangular(B),
         UnitUpperTriangular(B),
-        # LowerTriangular(B),
-        # UnitLowerTriangular(B)
+        LowerTriangular(B),
+        UnitLowerTriangular(B)
       )
-        @show typeof(C)
+        # @show typeof(C)
         @test TriangularSolve.rdiv!(res, A, C) * C ≈ A
         check_box_for_nans(RR, m, n)
         @test TriangularSolve.rdiv!(res, A, C, Val(false)) * C ≈ A
@@ -48,12 +48,12 @@ function test_solve(::Type{T}) where {T}
       A .= rand.(T)
 
       for C in (
-        # UpperTriangular(B),
-        # UnitUpperTriangular(B),
+        UpperTriangular(B),
+        UnitUpperTriangular(B),
         LowerTriangular(B),
         UnitLowerTriangular(B)
       )
-        @show typeof(C)
+        # @show typeof(C)
         @test C * TriangularSolve.ldiv!(res, C, A) ≈ A
         check_box_for_nans(RR, n, m)
         @test C * TriangularSolve.ldiv!(res, C, A, Val(false)) ≈ A
