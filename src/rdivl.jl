@@ -43,20 +43,12 @@
   for n = N:-1:1
     A_n = Asym[n]
     if !UNIT
-      push!(
-        q.args,
-        Expr(:(=), A_n, Expr(:call, Base.FastMath.mul_fast, A_n, Lsym[n, n]))
-      )
+      AdL = Expr(:call, Base.FastMath.mul_fast, A_n, Lsym[n, n])
+      push!(q.args, Expr(:(=), A_n, AdL))
     end
     for k = 1:n-1
-      push!(
-        q.args,
-        Expr(
-          :(=),
-          Asym[k],
-          Expr(:call, vfnmadd_fast, A_n, Lsym[n, k], Asym[k])
-        )
-      )
+      AdL = Expr(:call, vfnmadd_fast, A_n, Lsym[n, k], Asym[k])
+      push!(q.args, Expr(:(=), Asym[k], AdL))
     end
   end
   push!(q.args, Expr(:call, VecUnroll, rett))
@@ -168,25 +160,23 @@ end
 ) where {W,U,UNIT}
   # n is num cols of `spa` to reduce
   z = static(0)
+  i = Unroll{2,1,W,1,W,zero(UInt),1}(Unroll{1,W,U,1,W,zero(UInt),1}((z, z)))
   quote
     $(Expr(:meta, :inline))
-    i = $(Unroll{2,1,W,1,W,zero(UInt),1})(
-      $(Unroll{1,W,U,1,W,zero(UInt),1})(($z, n))
-    )
-    C11 = VectorizationBase.data(vload(spa, i))
+    C11 = VectorizationBase.data(vload(spa, $i))
     Base.Cartesian.@nexprs $W c -> C11_c = $getfield(C11, c)
     for nk ∈ SafeCloseOpen(n) # nmuladd
       nkw = nk + $W
       A11 = vload(spa, $(Unroll{1,W,U,1,W,zero(UInt),1})(($z, nkw)))
       Base.Cartesian.@nexprs $W c ->
-        C11_c = vfnmadd_fast(A11, vload(spl, (nkw, c - 1)), C11_c)
+        C11_c = vfnmadd_fast(A11, vload(spl, (nkw, static(c - 1))), C11_c)
     end
     # `solve_AL` solves A /= L, where
     # A is WU x W
     # L is W x W
     C11vu =
       solve_AL(VecUnroll((Base.Cartesian.@ntuple $W C11)), spl, $(Val(UNIT)))
-    vstore!(spa, C11vu, i)
+    vstore!(spa, C11vu, $i)
   end
 end
 @generated function rdivl_solve_W!(
@@ -197,21 +187,21 @@ end
   ::Val{UNIT}
 ) where {W,UNIT}
   z = static(0)
+  i = Unroll{2,1,W,1,W,(-1 % UInt),1}((z, z))
   quote
     $(Expr(:meta, :inline))
     # here, we just want to load the vectors
-    i = $(Unroll{2,1,W,1,W,(-1 % UInt),1})(($z, n))
-    C11 = VectorizationBase.data(vload(spa, i, mask))
+    C11 = VectorizationBase.data(vload(spa, $i, mask))
     Base.Cartesian.@nexprs $W c -> C11_c = $getfield(C11, c)
     for nk ∈ SafeCloseOpen(n) # nmuladd
       nkw = nk + $W
       A11 = vload(spa, ($(MM{W}(z)), nkw), mask)
       Base.Cartesian.@nexprs $W c ->
-        C11_c = vfnmadd_fast(A11, vload(spl, (nkw, n + (c - 1))), C11_c)
+        C11_c = vfnmadd_fast(A11, vload(spl, (nkw, static(c - 1))), C11_c) #=n +=#
     end
     C11 = VecUnroll((Base.Cartesian.@ntuple $W C11))
     C11 = solve_AL(C11, spl, $(Val(UNIT)))
-    vstore!(spa, C11, i, mask)
+    vstore!(spa, C11, $i, mask)
   end
 end
 
@@ -290,8 +280,9 @@ end
   ::Val{UNIT}
 ) where {W,U,UNIT}
   z = static(0)
-  error("not implemented")
-  quote
+  # B_{n,m} = (A_{n,m} - \sum_{i=n+1}^N U_{n,i}B_{i,m})/U_{n,n}
+  Aind = Unroll{1,1,W,2,W,zero(UInt),1}(Unroll{2,W,U,2,W,zero(UInt),1}((z, z)))
+  q = quote
     # $(Expr(:meta, :inline))
     # C = U \ A; U * C = A
     # A_{i,j} = U_{i,i}*C_{i,j} + \sum_{k=i+1}^{N}U_{i,k}C_{k,j}
@@ -311,15 +302,7 @@ end
     # outer unroll are `W` rows
     # Inner unroll are `W*U` columns (U simd vecs)
     # 
-    A11 = getfield(
-      vload(
-        spa,
-        $(Unroll{1,1,W,2,W,zero(UInt),1})(
-          $(Unroll{2,W,U,2,W,zero(UInt),1})(($z, n))
-        )
-      ),
-      :data
-    )
+    A11 = getfield(vload(spa, $Aind), :data)
     # The `W` rows
     Base.Cartesian.@nexprs $W c -> A11_c = getfield(A11, c)
     # compute
@@ -327,67 +310,95 @@ end
     # Each iter:
     # A_{j+[0,W), i+[0,W*U)} -= C_{j+[0,W),k}*U_{k,i+[0,W*U)}
     for nk ∈ SafeCloseOpen(n) # nmuladd
-      U_ki = vload(spu, $(Unroll{2,W,U,2,W,zero(UInt),1})((nk, n)))
+      nkw = nk + $W
+      U_ki = vload(spu, $(Unroll{2,W,U,2,W,zero(UInt),1})((nkw, $z)))
       Base.Cartesian.@nexprs $W c ->
-        A11_c = vfnmadd_fast(U_ki, vload(spa, (static(c - 1), nk)), A11_c)
-    end
-    # solve AU wants:
-    # outer unroll are `W` columns
-    # Inner unroll are `W` rows (U simd vecs)
-    # So, we'll use `U = 1`, and transpose blocks
-    # We then have column-major multiplies
-    Base.Cartesian.@nexprs $U u -> begin
-      # take A[(u-1)*W,u*W), [0,W)]
-      X_u = getfield(
-        VectorizationBase.transpose_vecunroll(
-          VecUnroll(
-            Base.Cartesian.@ntuple $W w ->
-              getfield(getfield(A11_w, :data), u)
-          )
-        ),
-        :data
-      )
-      Base.Cartesian.@nexprs $W c -> X_u_c = getfield(X_u, c)
-      Base.Cartesian.@nexprs (u - 1) j -> begin
-        # subtract
-        # r = W*(j-1)+[0,W)
-        # A_{j+[0,W),i+r} -= C_{j+[0,W),r}*U_{r,i+r}
-        # W x W matmul
-        Base.Cartesian.@nexprs $W k -> begin # reduction
-          Base.Cartesian.@nexprs $W c -> begin # cols
-            U_u_j_k_c = vload(
-              spu,
-              (n + ((k - 1) + ((j - 1) * $W)), n + ((c - 1) + ((u - 1) * $W)))
-            )
-            X_u_c = vfnmadd_fast(C_j_k, U_u_j_k_c, X_u_c)
-          end
-        end
-      end
-      C_u = solve_AU(
-        VecUnroll(Base.Cartesian.@ntuple $W X_u),
-        spu,
-        n + ((u - 1) * $W),
-        $(Val(UNIT))
-      )
-      Cdata_u = getfield(C_u, :data)
-      Base.Cartesian.@nexprs $W c -> C_u_c = getfield(Cdata_u, c)
-    end
-    # store at end (no aliasing)
-    Base.Cartesian.@nexprs $U u -> begin
-      vstore!(spa, C_u, $(Unroll{2,1,W,1,W,zero(UInt),1})(($z, n + (u - 1) * $W)))
+        A11_c = vfnmadd_fast(U_ki, vload(spa, (static(c - 1), nkw)), A11_c)
     end
   end
+  # solve AL wants:
+  # outer unroll are `W` columns
+  # Inner unroll are `W` rows (U simd vecs)
+  # So, we'll use `U = 1`, and transpose blocks
+  # We then have column-major multiplies
+  # This is needed, due to columns being independent, but rows dependent
+  # Unroll across the `u` blocks, we move up
+  Xu = Vector{Symbol}(undef, W)
+  Csym = Vector{Symbol}(undef, U)
+  for u = 1:U
+    X_u = Symbol(:X_, u)
+    push!(
+      q.args,
+      :(
+        $X_u = getfield(
+          VectorizationBase.transpose_vecunroll(
+            VecUnroll(
+              Base.Cartesian.@ntuple $W w ->
+                getfield(getfield(A11_w, :data), $(U + 1 - u))
+            )
+          ),
+          :data
+        )
+      )
+    )
+    for c = 1:W
+      X_u_c = Xu[c] = Symbol(:X_, u, :_, c)
+      push!(q.args, Expr(:(=), X_u_c, Expr(:call, getfield, X_u, c)))
+    end
+    # take A[(U-u+1)*W,u*W), [0,W)]
+    for j = 1:u-1
+      for k = 1:W
+        for c = 1:W
+          urow = ((W - k) + ((j - 1) * W))
+          ucol = ((c - 1) + ((U - u) * W))
+push!(q.args, Expr(:call, println, "Row = $urow; Col = $ucol"))
+          Uexpr = :(vload(spu, ($urow, $ucol)))
+          X_u_c = Xu[c]
+          C_j_k = Symbol(:C_, j, :_, W + 1 - k)
+          Xucexpr = Expr(:call, vfnmadd_fast, C_j_k, Uexpr, X_u_c)
+          push!(q.args, Expr(:(=), X_u_c, Xucexpr))
+        end
+      end
+    end
+    o = (U - u) * W
+    sp = Expr(:call, gesp, :spu, (o, o))
+    Xut = Expr(:tuple)
+    for c = 1:W
+      push!(Xut.args, Xu[c])
+    end
+    Xuvu = Expr(:call, VecUnroll, Xut)
+    C_u = Csym[u] = Symbol(:C_, u)
+    push!(q.args, Expr(:(=), C_u, :(solve_AL($Xuvu, $sp, $(Val(UNIT))))))
+    Cud = Symbol(C_u, :data)
+    push!(q.args, Expr(:(=), Cud, Expr(:call, getfield, C_u, QuoteNode(:data))))
+    for c = 1:W
+      push!(
+        q.args,
+        Expr(:(=), Symbol(:C_, u, :_, c), Expr(:call, getfield, Cud, c))
+      )
+    end
+  end
+  for u = 1:U
+    ui = Unroll{2,1,W,1,W,zero(UInt),1}((z, (U - u) * W))
+    C_u = Csym[u]
+    push!(q.args, :(vstore!(spa, $C_u, $ui)))
+  end
+  return q
 end
 @generated function ldivu_solve_W!(
   spa,
   spu,
   n,
   ::StaticInt{W},
-  ::Val{UNIT}
-) where {W,UNIT}
+  ::Val{UNIT},
+  ::StaticInt{R}
+) where {W,UNIT,R}
+  # B_{n,m} = (A_{n,m} - \sum_{i=n+1}^N U_{n,i}B_{i,m})/U_{n,n}
+  R <= 1 && throw("Remainder of `<= 1` shouldn't be called, but had $R.")
+  R > W && throw("Reaminderof `> $W` shouldn't be called, but had $R.")
   z = static(0)
-  error("not implemented")
-  quote
+  Aind = Unroll{1,1,R,2,W,zero(UInt),1}((z, z))
+  q = quote
     # $(Expr(:meta, :inline))
     # Like `ldivl_solve_W_u!`, except no unrolling, just a `W`x`W` block
     #
@@ -397,36 +408,59 @@ end
     # The inputs here are transposed, as the library was formulated in terms of `rdiv!`,
     # so we have
     # C_{j,i} = (A_{j,i} - \sum_{k=1}^{i-1}C_{j,k}U_{k,i}) / L_{i,i}
-    # This solves for the block: C_{j+[0,W],i+[0,W)}
+    # This solves for the block: C_{j+[0,R],i+[0,W)}
     # Rough alg:
-    # r=[0,W);
-    # X = A_{j+r,i+r} - \sum_{k=1}^{i-1}C_{j+r,k}*U_{k,i+r}
-    # C_{j+r,i+r} =  X / U_{i+r,i+r}
+    # r=[0,R); w=[0,W);
+    # X = A_{j+r,i+w} - \sum_{k=1}^{i-1}C_{j+r,k}*U_{k,i+w}
+    # C_{j+r,i+w} =  X / U_{i+r,i+w}
     #
     # Load the `W`x`W` block...
     # what about masking?
-    A11 =
-      getfield(vload(spa, $(Unroll{1,1,W,2,W,zero(UInt),1})(($z, n))), :data)
+    A11 = getfield(vload(spa, $Aind), :data)
     # The `W` rows
-    Base.Cartesian.@nexprs $W c -> A11_c = getfield(A11, c)
+    Base.Cartesian.@nexprs $R r -> A11_r = getfield(A11, r)
     # compute
     # A_{j,i} - \sum_{k=1}^{i-1}U_{k,i}C_{j,k})
     # Each iter:
     # A_{j+[0,W), i+[0,W*U)} -= C_{j+[0,W),k}*U_{k,i+[0,W*U)}
     for nk ∈ SafeCloseOpen(n) # nmuladd
-      U_ki = vload(spu, (nk, $(MM{W})(n)))
-      Base.Cartesian.@nexprs $W c ->
-        A11_c = vfnmadd_fast(U_ki, vload(spa, (static(c - 1), nk)), A11_c)
+      nkw = nk + $W
+      U_ki = vload(spu, (nkw, $(MM{W}(z))))
+      Base.Cartesian.@nexprs $R r ->
+        A11_r = vfnmadd_fast(U_ki, vload(spa, (static(r - 1), nkw)), A11_r)
     end
+  end
+  # pad with zeros
+  Wpad = VectorizationBase.nextpow2(R)
+  t = Expr(:tuple)
+  for r = 1:R
+    push!(t.args, Symbol(:A11_, r))
+  end
+  for _ = R+1:Wpad
+    push!(t.args, :(zero(A11_1)))
+  end
+  q2 = quote
     # solve AU wants us to transpose
     # We then have column-major multiplies
     # take A[(u-1)*W,u*W), [0,W)]
-    X = VectorizationBase.transpose_vecunroll(
-      VecUnroll(Base.Cartesian.@ntuple $W A11)
-    )
-    C_u = solve_AU(X, spu, n, $(Val(UNIT)))
-    vstore!(spa, C_u, $(Unroll{2,1,W,1,W,zero(UInt),1})(($z, n)))
+    X = VectorizationBase.transpose_vecunroll(VecUnroll($t))
+    C_u = solve_AL(X, spu, $(Val(UNIT)))
   end
+  push!(q.args, q2)
+  q3 = if R == Wpad
+    quote
+      i = $(Unroll{2,1,W,1,Wpad,zero(UInt),1}((z, z)))
+      vstore!(spa, C_u, i)
+    end
+  else
+    quote
+      mask = _mask($(static(Wpad)), $(static(R)))
+      i = $(Unroll{2,1,W,1,Wpad,(-1 % UInt),1}((z, z)))
+      vstore!(spa, C_u, i, mask)
+    end
+  end
+  push!(q.args, q3)
+  return q
 end
 
 @generated function _ldivu_remainder!(
@@ -438,11 +472,12 @@ end
   ::Val{UNIT},
   ::StaticInt{r}
 ) where {W,UNIT,r}
-  error("not updated")
+  # B_{n,m} = (A_{n,m} - \sum_{i=n+1}^N U_{n,i}B_{i,m})/U_{n,n}
   r <= 0 && throw("Remainder of `<= 0` shouldn't be called, but had $r.")
   r >= W && throw("Reaminderof `>= $W` shouldn't be called, but had $r.")
+  z = static(0)
   if r == 1
-    z = static(0)
+    # one iter remaining
     sub = Base.FastMath.sub_fast
     mul = Base.FastMath.mul_fast
     div = Base.FastMath.div_fast
@@ -457,35 +492,46 @@ end
     end
     quote
       $(Expr(:meta, :inline))
-      for j = 0:N-1
+      j = N
+      while true
+        j -= 1
         $vlxj
-        for i = (j+1):N-1
+        i = j
+        while i > 0
+          i -= 1
           xi = vload(spa, ($z, i))
           Uji = vload(spu, (j, i))
           vstore!(spa, $sub(xi, $mul(xj, Uji)), ($z, i))
         end
+        j == 0 && break
       end
     end
   else
+    # `r` iters remaining, r > 1
     WS = static(W)
     quote
       $(Expr(:meta, :inline))
-      n = Nr # non factor of W remainder
-      if n > 0
-        let t = (spa, spu),
-          ft = flatten_to_tup(t),
-          mask = $(getfield(_mask(WS, r), :u) % UInt32)
-
-          BdivL_small_kern!(n, mask, $WS, $(Val(UNIT)), typeof(t), ft...)
+      mask = $(getfield(_mask(WS, r), :u) % UInt32)
+      n = N - Nr
+      if Nr > 0
+        @show pointer(spa), pointer(spu), n, Nr
+        let t = (gesp(spa, ($z, n)), gesp(spu, (n, n))), ft = flatten_to_tup(t)
+          BdivL_small_kern!(Nr, mask, $WS, $(Val(UNIT)), typeof(t), ft...)
         end
       end
-      # while n < N - $(W * U - 1)
-      #   ldivu_solve_W_u!(spa, spa, spu, n, $WS, $US, Val(UNIT), Val(r))
-      #   n += $(W * U)
-      # end
-      while n != N
-        ldivu_solve_W!(spa, spu, n, $WS, $(Val(UNIT)), $(StaticInt(r)))
-        n += $W
+      # non-U, order first as matmul kern is smaller than optimal
+      while n != 0
+        k = N - n
+        n -= W
+        @show pointer(spa), pointer(spu), k, n
+        ldivu_solve_W!(
+          gesp(spa, ($z, n)),
+          gesp(spu, (n, n)),
+          k,
+          $WS,
+          Val(UNIT),
+          $(StaticInt(r))
+        )
       end
     end
   end
@@ -501,41 +547,24 @@ end
   ::Type{Args},
   args::Vararg{Any,K}
 ) where {W,UNIT,Args,K}
-  error("not updated")
   WS = static(W)
-  # US = static(U)
   if W == 2
     quote
       $(Expr(:meta, :inline))
       spa, spu = reassemble_tup(Args, args)
-      _ldivu_remainder!(spa, spu, N, Nr, $WS, $(Val(UNIT)), $(static(1)))
+      _ldivu_remainder!(spa, spu, N, Nrr, Nru, $WS, $(Val(UNIT)), $(static(1)))
       nothing
     end
   elseif W == 8
+    s8 = StaticInt(8)
     quote
       # $(Expr(:meta, :inline))
       spa, spu = reassemble_tup(Args, args)
       if m == M - 1
-        _ldivu_remainder!(
-          spa,
-          spu,
-          N,
-          Nr,
-          static(8),
-          $(Val(UNIT)),
-          StaticInt(1)
-        )
+        _ldivu_remainder!(spa, spu, N, Nr, $s8, $(Val(UNIT)), $(StaticInt(1)))
       else
         if m == M - 2
-          _ldivu_remainder!(
-            spa,
-            spu,
-            N,
-            Nr,
-            static(8),
-            $(Val(UNIT)),
-            StaticInt(2)
-          )
+          _ldivu_remainder!(spa, spu, N, Nr, $s8, $(Val(UNIT)), $(StaticInt(2)))
         else
           if m == M - 3
             _ldivu_remainder!(
@@ -543,9 +572,9 @@ end
               spu,
               N,
               Nr,
-              static(8),
+              $s8,
               $(Val(UNIT)),
-              StaticInt(3)
+              $(StaticInt(3))
             )
           else
             if m == M - 4
@@ -554,9 +583,9 @@ end
                 spu,
                 N,
                 Nr,
-                static(8),
+                $s8,
                 $(Val(UNIT)),
-                StaticInt(4)
+                $(StaticInt(4))
               )
             else
               if m == M - 5
@@ -565,9 +594,9 @@ end
                   spu,
                   N,
                   Nr,
-                  static(8),
+                  $s8,
                   $(Val(UNIT)),
-                  StaticInt(5)
+                  $(StaticInt(5))
                 )
               else
                 if m == M - 6
@@ -576,9 +605,9 @@ end
                     spu,
                     N,
                     Nr,
-                    static(8),
+                    $s8,
                     $(Val(UNIT)),
-                    StaticInt(6)
+                    $(StaticInt(6))
                   )
                 else
                   _ldivu_remainder!(
@@ -586,9 +615,9 @@ end
                     spu,
                     N,
                     Nr,
-                    static(8),
+                    $s8,
                     $(Val(UNIT)),
-                    StaticInt(7)
+                    $(StaticInt(7))
                   )
                 end
               end
@@ -616,63 +645,74 @@ function _ldivu_L!(
   ::Type{Args},
   args::Vararg{Any,K}
 ) where {UNIT,Args,K}
-  error("not updated")
-  spa, spl = reassemble_tup(Args, args)
+  # B_{n,m} = (A_{n,m} - \sum_{i=n+1}^N U_{n,i}B_{i,m})/U_{n,n}
+  spa, spu = reassemble_tup(Args, args)
   T = eltype(spa)
   WS = pick_vector_width(T)
   W = Int(WS)
   UF = unroll_factor(WS)
   WU = UF * WS
-# for ldiv, we unroll over `n`
-  Nd, Nr = VectorizationBase.vdivrem(N, WS)
+  # for ldiv, we unroll over `n`
+  Ndu, Nru = VectorizationBase.vdivrem(N, WU)
+  Ndr, Nrr = VectorizationBase.vdivrem(Nru, WS)
   z = StaticInt(0)
+  nstart = Int(Ndu * WU)::Int + Int(Ndr * W)::Int
   m = 0
+  # compute = false
+  compute = true
   # m, no remainder
   while m < M - WS + 1
-    n = Int(Nd * W)::Int
-    if Nr > 0
-      let t = (gesp(spa, (n, z)), gesp(spl, (n, n))), ft = flatten_to_tup(t)
-        BdivL_small_kern_u!(Nr, StaticInt(1), Val(UNIT), WS, typeof(t), ft...)
+    n::Int = nstart
+    if Nrr > 0
+      let t = (gesp(spa, (z, n)), gesp(spu, (n, n))), ft = flatten_to_tup(t)
+        @show 0, n
+        compute && BdivL_small_kern_u!(
+          Nrr,
+          StaticInt(1),
+          Val(UNIT),
+          WS,
+          typeof(t),
+          ft...
+        )
       end
     end
-    for _ ∈ 1:Nd
+    # non-U, order first as matmul kern is smaller than optimal
+    for _ ∈ 1:Ndr
       k = N - n
       n -= W
-      ldivu_solve_W_u!(
-        gesp(spa, (n, z)),
-        gesp(spl, (n, n)),
+      @show 1, n, k
+      compute && ldivu_solve_W!(
+        gesp(spa, (z, n)),
+        gesp(spu, (n, n)),
+        k,
+        WS,
+        Val(UNIT),
+        WS
+      )
+    end
+    # for _ ∈ 1:Ndu
+    while n != 0
+      k = N - n
+      n -= Int(WU)
+      @show 2, n, k
+      compute && ldivu_solve_W_u!(
+        gesp(spa, (z, n)),
+        gesp(spu, (n, n)),
         k,
         WS,
         UF,
         Val(UNIT)
       )
     end
-    while n < N - (WU - 1)
-      ldivu_solve_W_u!(spa, spl, n, WS, UF, Val(UNIT))
-      n += WU
-    end
-
-    n = Nr # non factor of W remainder
-    if n > 0
-      let t = (spa, spl), ft = flatten_to_tup(t)
-        BdivL_small_kern_u!(n, StaticInt(1), Val(UNIT), WS, typeof(t), ft...)
-      end
-    end
-    while n < N - (WU - 1)
-      ldivu_solve_W_u!(spa, spl, n, WS, UF, Val(UNIT))
-      n += WU
-    end
-    while n != N
-      ldivu_solve_W!(spa, spl, n, WS, Val(UNIT))
-      n += W
-    end
     m += W
-    spa = gesp(spa, (W, z))
+    spa = gesp(spa, (W, StaticInt(0)))
   end
   # remainder on `m`
   if m < M
-    let tup = (spa, spl), ftup = flatten_to_tup(tup)
-      ldivu_remainder!(M, N, m, Nr, WS, Val(UNIT), typeof(tup), ftup...)
+    let tup = (spa, spu), ftup = flatten_to_tup(tup)
+      @show m, Nrr, M
+      compute &&
+        ldivu_remainder!(M, N, m, Nrr, WS, Val(UNIT), typeof(tup), ftup...)
     end
   end
   nothing
