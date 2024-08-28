@@ -20,51 +20,99 @@ julia> N = 100;
 
 julia> A = rand(N,N); B = rand(N,N); C = similar(A);
 
-julia> @benchmark TriangularSolve.rdiv!($C, $A, UpperTriangular($B), Val(false)) # false means single threaded
+julia> @benchmark TriangularSolve.rdiv!(copyto!($C, $A), UpperTriangular($B), Val(false)) # false means single threaded
 BenchmarkTools.Trial: 10000 samples with 1 evaluation.
- Range (min … max):  15.909 μs …  41.524 μs  ┊ GC (min … max): 0.00% … 0.00%
- Time  (median):     17.916 μs               ┊ GC (median):    0.00%
- Time  (mean ± σ):   17.751 μs ± 697.786 ns  ┊ GC (mean ± σ):  0.00% ± 0.00%
+ Range (min … max):  12.106 μs … 108.141 μs  ┊ GC (min … max): 0.00% … 0.00%
+ Time  (median):     12.841 μs               ┊ GC (median):    0.00%
+ Time  (mean ± σ):   12.862 μs ±   1.585 μs  ┊ GC (mean ± σ):  0.00% ± 0.00%
 
-  ▃▁    ▁    ▁     ▄▁    ▇▆    ▆█▃                             ▂
-  ██▃▁▁██▁▁▁▁█▆▁▁▃▇██▄▃▁███▆▁▄▄███▄▄▅▅▆▇█▇▄▅▆▇██▇█▇▇▆▄▅▄▁▄▁▄▄▇ █
-  15.9 μs       Histogram: log(frequency) by time      19.9 μs <
+   █                                                            
+  ▃█▆▂▁▁▁▁▂▃▇▄▂▂▇▄▂▂▂▃▃▃▂▂▂▃▃▂▂▂▂▁▁▁▁▂▂▁▁▂▂▂▂▂▂▂▂▂▂▂▂▁▂▂▂▂▂▂▂▂ ▂
+  12.1 μs         Histogram: frequency by time         16.6 μs <
 
  Memory estimate: 0 bytes, allocs estimate: 0.
 
 julia> @benchmark rdiv!(copyto!($C, $A), UpperTriangular($B))
 BenchmarkTools.Trial: 10000 samples with 1 evaluation.
- Range (min … max):  17.578 μs … 75.835 μs  ┊ GC (min … max): 0.00% … 0.00%
- Time  (median):     19.852 μs              ┊ GC (median):    0.00%
- Time  (mean ± σ):   19.827 μs ±  1.342 μs  ┊ GC (mean ± σ):  0.00% ± 0.00%
+ Range (min … max):  13.483 μs …  31.165 μs  ┊ GC (min … max): 0.00% … 0.00%
+ Time  (median):     13.698 μs               ┊ GC (median):    0.00%
+ Time  (mean ± σ):   13.816 μs ± 791.937 ns  ┊ GC (mean ± σ):  0.00% ± 0.00%
 
-  ▄▂              ▂    ▆▅   ▁█▇▂   ▅▃     ▂                   ▂
-  ██▁▁▃█▇▁▁▁█▇▄▄▁██▇▄▄▄██▆▅▄████▅▄▆██▆▆▆▆▇██▇▇▆▆▇▆▅▆▄▅▅▆▄▅▄▅▅ █
-  17.6 μs      Histogram: log(frequency) by time      22.4 μs <
-
- Memory estimate: 0 bytes, allocs estimate: 0.
-
-julia> @benchmark ldiv!($C, LowerTriangular($B), $A)
-BenchmarkTools.Trial: 10000 samples with 1 evaluation.
- Range (min … max):  19.102 μs …  69.966 μs  ┊ GC (min … max): 0.00% … 0.00%
- Time  (median):     21.561 μs               ┊ GC (median):    0.00%
- Time  (mean ± σ):   21.565 μs ± 890.952 ns  ┊ GC (mean ± σ):  0.00% ± 0.00%
-
-  ▂▂                 ▂▃     ▄▄     ▆█▄     ▅▅                  ▂
-  ██▃▁▁▁▇█▁▁▁▁▅█▁▁▁▁▁██▅▁▁▁▅██▆▁▁▁▆███▆▅▃▅████▃▄▅██▇▇▅▆▆▇▇█▇▆▆ █
-  19.1 μs       Histogram: log(frequency) by time      23.4 μs <
+   ▃▆██▅         ▃▄▃                                           ▂
+  ▆██████▄▃▁▁▃▁▁▇████▃▃▃▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▅▄▁▄▆▇▆▆ █
+  13.5 μs       Histogram: log(frequency) by time      16.8 μs <
 
  Memory estimate: 0 bytes, allocs estimate: 0.
 
-julia> @benchmark TriangularSolve.ldiv!($C, LowerTriangular($B), $A, Val(false)) # false means single threaded
+julia> @benchmark TriangularSolve.rdiv!(copyto!($C, $A), LowerTriangular($B), Val(false)) # false means single threaded
 BenchmarkTools.Trial: 10000 samples with 1 evaluation.
- Range (min … max):  19.082 μs …  39.078 μs  ┊ GC (min … max): 0.00% … 0.00%
- Time  (median):     19.694 μs               ┊ GC (median):    0.00%
- Time  (mean ± σ):   19.765 μs ± 774.848 ns  ┊ GC (mean ± σ):  0.00% ± 0.00%
+ Range (min … max):  12.990 μs …  35.762 μs  ┊ GC (min … max): 0.00% … 0.00%
+ Time  (median):     13.094 μs               ┊ GC (median):    0.00%
+ Time  (mean ± σ):   13.170 μs ± 636.637 ns  ┊ GC (mean ± σ):  0.00% ± 0.00%
 
-    ▃        ▄█         ▁
-  ▂▇██▄▂▁▁▂▂▃███▃▂▁▂▁▂▂▅█▇▃▂▂▂▁▂▂▂▂▂▂▂▁▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▁▁▂▂▂ ▃
-  19.1 μs         Histogram: frequency by time         22.1 μs <
+  ▄██▅          ▂▂                                             ▂
+  ████▆▄▃▁▁▁▁▁▁▄███▃▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▃▄▅▄▅▅▇ █
+  13 μs         Histogram: log(frequency) by time        16 μs <
+
+ Memory estimate: 0 bytes, allocs estimate: 0.
+
+julia> @benchmark rdiv!(copyto!($C, $A), LowerTriangular($B))
+BenchmarkTools.Trial: 10000 samples with 1 evaluation.
+ Range (min … max):  14.119 μs …  32.767 μs  ┊ GC (min … max): 0.00% … 0.00%
+ Time  (median):     14.321 μs               ┊ GC (median):    0.00%
+ Time  (mean ± σ):   14.372 μs ± 461.912 ns  ┊ GC (mean ± σ):  0.00% ± 0.00%
+
+    ▂█▆                                                         
+  ▂▄███▇▃▂▂▂▁▁▂▁▂▂▂▂▂▂▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▂▂▂▂▂▂ ▂
+  14.1 μs         Histogram: frequency by time         17.3 μs <
+
+ Memory estimate: 0 bytes, allocs estimate: 0.
+
+julia> @benchmark TriangularSolve.ldiv!(LowerTriangular($B), copyto!($C, $A), Val(false)) # false means single threaded
+BenchmarkTools.Trial: 10000 samples with 1 evaluation.
+ Range (min … max):  16.579 μs …  38.431 μs  ┊ GC (min … max): 0.00% … 0.00%
+ Time  (median):     16.728 μs               ┊ GC (median):    0.00%
+ Time  (mean ± σ):   16.812 μs ± 640.766 ns  ┊ GC (mean ± σ):  0.00% ± 0.00%
+
+  ▁▅██▅              ▁▂▁                                       ▂
+  █████▇▃▁▁▁▁▁▁▁▁▁▁▁▄███▅▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▅▃▅▃▅▇█ █
+  16.6 μs       Histogram: log(frequency) by time      19.6 μs <
+
+ Memory estimate: 0 bytes, allocs estimate: 0.
+
+julia> @benchmark ldiv!(LowerTriangular($B), copyto!($C, $A))
+BenchmarkTools.Trial: 10000 samples with 1 evaluation.
+ Range (min … max):  15.763 μs … 38.550 μs  ┊ GC (min … max): 0.00% … 0.00%
+ Time  (median):     15.936 μs              ┊ GC (median):    0.00%
+ Time  (mean ± σ):   16.351 μs ±  1.103 μs  ┊ GC (mean ± σ):  0.00% ± 0.00%
+
+  ▃▇█▆         ▁▅▆▄   ▂▄▅▃    ▁▂▁                             ▂
+  █████▄▄▁▁▁▃▁▄████▆▁▅████▆▁▃▆███▅▃▁▁▁▁▁▁▁▁▁▁▁▁▄▃▄▅▆▇█▆▅▆▅▅▆▄ █
+  15.8 μs      Histogram: log(frequency) by time      19.5 μs <
+
+ Memory estimate: 0 bytes, allocs estimate: 0.
+
+julia> @benchmark TriangularSolve.ldiv!(UpperTriangular($B), copyto!($C, $A), Val(false)) # false means single threaded
+BenchmarkTools.Trial: 10000 samples with 1 evaluation.
+ Range (min … max):  15.921 μs …  34.610 μs  ┊ GC (min … max): 0.00% … 0.00%
+ Time  (median):     16.180 μs               ┊ GC (median):    0.00%
+ Time  (mean ± σ):   16.290 μs ± 733.446 ns  ┊ GC (mean ± σ):  0.00% ± 0.00%
+
+     ▅██▃            ▂▃▁                                       ▂
+  ▇█▆████▅▄▁▁▁▁▁▁▁▃▁▅███▄▁▁▁▁▄▇█▄▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▃▆▅▄▃▇█ █
+  15.9 μs       Histogram: log(frequency) by time      19.1 μs <
+
+ Memory estimate: 0 bytes, allocs estimate: 0.
+
+julia> @benchmark ldiv!(UpperTriangular($B), copyto!($C, $A))
+BenchmarkTools.Trial: 10000 samples with 1 evaluation.
+ Range (min … max):  15.085 μs …  37.057 μs  ┊ GC (min … max): 0.00% … 0.00%
+ Time  (median):     15.274 μs               ┊ GC (median):    0.00%
+ Time  (mean ± σ):   15.373 μs ± 733.025 ns  ┊ GC (mean ± σ):  0.00% ± 0.00%
+
+   ▄▇█▇▄           ▃▂                                          ▂
+  ██████▇▃▁▃▁▁▃▁▁▅████▄▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▄▆▃▅▅▆█ █
+  15.1 μs       Histogram: log(frequency) by time      18.3 μs <
 
  Memory estimate: 0 bytes, allocs estimate: 0.
 ```
