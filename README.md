@@ -6,7 +6,19 @@
 [![Coverage](https://codecov.io/gh/JuliaSIMD/TriangularSolve.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/JuliaSIMD/TriangularSolve.jl)
 
 
-Performs some triangular solves. For example:
+Performs triangular solves for `Float32`/`Float64` matrices with at least two
+right-hand sides, covering all four side/triangle combinations (plus the
+unit-diagonal variants of each):
+
+- `rdiv!(A, ::UpperTriangular)` / `rdiv!(A, ::UnitUpperTriangular)`: `A ← A / U`
+- `rdiv!(A, ::LowerTriangular)` / `rdiv!(A, ::UnitLowerTriangular)`: `A ← A / L`
+- `ldiv!(::LowerTriangular, A)` / `ldiv!(::UnitLowerTriangular, A)`: `A ← L \ A`
+- `ldiv!(::UpperTriangular, A)` / `ldiv!(::UnitUpperTriangular, A)`: `A ← U \ A`
+
+Three-argument out-of-place forms (`rdiv!(C, A, U)`, `ldiv!(C, U, A)`) are also
+provided, and each method takes a trailing `Val(true)`/`Val(false)` argument
+controlling multithreading. Other element types and vector right-hand sides
+fall back to `LinearAlgebra`. For example:
 ```julia
 julia> using TriangularSolve, LinearAlgebra, MKL;
 
