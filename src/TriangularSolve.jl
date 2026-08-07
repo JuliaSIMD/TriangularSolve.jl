@@ -1934,7 +1934,7 @@ end
   ::StaticInt{R}
 ) where {W,UNIT,R}
   R <= 1 && throw("Remainder of `<= 1` shouldn't be called, but had $R.")
-  R >= W && throw("Reaminderof `>= $W` shouldn't be called, but had $R.")
+  R >= W && throw("Remainder of `>= $W` shouldn't be called, but had $R.")
   z = static(0)
   q = quote
     # Like the `R`-remainder `ldiv_solve_W!`, but backward: solves the block
@@ -1991,7 +1991,7 @@ end
   ::StaticInt{r}
 ) where {W,UNIT,r}
   r <= 0 && throw("Remainder of `<= 0` shouldn't be called, but had $r.")
-  r >= W && throw("Reaminderof `>= $W` shouldn't be called, but had $r.")
+  r >= W && throw("Remainder of `>= $W` shouldn't be called, but had $r.")
   if r == 1
     z = static(0)
     sub = Base.FastMath.sub_fast
