@@ -1505,7 +1505,12 @@ end
     # kernels' `SafeCloseOpen(n)` loops
     spck = gesp(spc, ($z, n + $W))
     splk = gesp(spl, (n + $W, n))
-    for nk ∈ SafeCloseOpen(nend - n - $W) # nmuladd
+    # nk descends so the most recently solved (just stored) columns are read
+    # last, giving their stores time to drain — the mirror of the forward
+    # kernels' ascending reduction, which also ends on the freshest block
+    nk = nend - n - $W
+    while nk > 0
+      nk -= 1
       A11 = vload(spck, $(Unroll{1,W,U,1,W,zero(UInt),1})(($(StaticInt(0)), nk)))
       Base.Cartesian.@nexprs $W c ->
         C11_c = vfnmadd_fast(A11, vload(splk, (nk, $z + (c - 1))), C11_c)
@@ -1544,7 +1549,9 @@ end
     Base.Cartesian.@nexprs $W c -> C11_c = C11[c]
     spck = gesp(spc, ($z, n + $W))
     splk = gesp(spl, (n + $W, n))
-    for nk ∈ SafeCloseOpen(nend - n - $W) # nmuladd
+    nk = nend - n - $W
+    while nk > 0
+      nk -= 1
       A11 = vload(spck, ($(MM{W}(z)), nk), mask)
       Base.Cartesian.@nexprs $W c ->
         C11_c = vfnmadd_fast(A11, vload(splk, (nk, $z + (c - 1))), C11_c)
@@ -1834,7 +1841,9 @@ end
     # kernels' `SafeCloseOpen(n)` loops
     spck = gesp(spc, ($z, n + $(W * U)))
     splk = gesp(spl, (n + $(W * U), n))
-    for nk ∈ SafeCloseOpen(nend - n - $(W * U)) # nmuladd
+    nk = nend - n - $(W * U)
+    while nk > 0
+      nk -= 1
       L_ki = vload(splk, $(Unroll{2,W,U,2,W,zero(UInt),1})((nk, $z)))
       Base.Cartesian.@nexprs $W c ->
         A11_c = vfnmadd_fast(L_ki, vload(spck, (static(c - 1), nk)), A11_c)
@@ -1933,7 +1942,9 @@ end
     Base.Cartesian.@nexprs $W c -> A11_c = getfield(A11, c)
     spck = gesp(spc, ($z, n + $W))
     splk = gesp(spl, (n + $W, n))
-    for nk ∈ SafeCloseOpen(nend - n - $W) # nmuladd
+    nk = nend - n - $W
+    while nk > 0
+      nk -= 1
       L_ki = vload(splk, (nk, $(MM{W}(z))))
       Base.Cartesian.@nexprs $W c ->
         A11_c = vfnmadd_fast(L_ki, vload(spck, (static(c - 1), nk)), A11_c)
@@ -1966,7 +1977,9 @@ end
     Base.Cartesian.@nexprs $R r -> A11_r = getfield(A11, r)
     spck = gesp(spc, ($z, n + $W))
     splk = gesp(spl, (n + $W, n))
-    for nk ∈ SafeCloseOpen(nend - n - $W) # nmuladd
+    nk = nend - n - $W
+    while nk > 0
+      nk -= 1
       L_ki = vload(splk, (nk, $(MM{W}(z))))
       Base.Cartesian.@nexprs $R r ->
         A11_r = vfnmadd_fast(L_ki, vload(spck, (static(r - 1), nk)), A11_r)
