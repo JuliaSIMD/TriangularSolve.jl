@@ -133,6 +133,40 @@ end
       }
     end
   end
+  @testset "vector right-hand sides" begin
+    # sizes straddling VECTOR_RHS_CUTOFF cover both the kernel path and the
+    # LinearAlgebra deferral
+    for T ∈ (Float64, Float32),
+      n ∈ (1, 2, 5, 8, 16, 33, 64, 127, 128, 129, 200, 500)
+
+      P = rand(T, n, n) + T(n) * I
+      b = rand(T, n)
+      for wrap ∈ (
+          UpperTriangular,
+          UnitUpperTriangular,
+          LowerTriangular,
+          UnitLowerTriangular
+        ),
+        thread ∈ (Val(false), Val(true))
+
+        U = wrap(P)
+        x = TriangularSolve.ldiv!(U, copy(b), thread)
+        @test x ≈ Matrix(U) \ b rtol = sqrt(eps(T)) * n
+        c = similar(b)
+        @test TriangularSolve.ldiv!(c, U, copy(b), thread) ≈ x
+      end
+    end
+    F = lu!(rand(100, 100) + 100I).factors
+    bf = rand(100)
+    Uf = UpperTriangular(F)
+    @test TriangularSolve.ldiv!(Uf, copy(bf), Val(false)) ≈ Matrix(Uf) \ bf
+    xf = copy(bf)
+    for thread ∈ (Val(false), Val(true))
+      TriangularSolve.ldiv!(Uf, xf, thread)
+      xf .= bf
+      @test iszero(@allocated TriangularSolve.ldiv!(Uf, xf, thread))
+    end
+  end
   @testset "dimension mismatch throws" begin
     @test_throws DimensionMismatch TriangularSolve.rdiv!(
       rand(4, 8), LowerTriangular(rand(6, 6) + 6I), Val(false)
