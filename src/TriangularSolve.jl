@@ -1819,6 +1819,7 @@ end
 ) where {W,U,UNIT}
   z = static(0)
   q = quote
+    $(Expr(:meta, :inline))
     # C = A / L in the transposed (row-major) layout; equivalently, C' = L' \ A'
     # with L' upper triangular — backward substitution for the left-upper solve.
     # Solves the block C_{j+[0,W), n+[0,W*U)}; columns [n+W*U, nend) are already
@@ -1936,6 +1937,7 @@ end
 ) where {W,UNIT}
   z = static(0)
   quote
+    $(Expr(:meta, :inline))
     # Like `uldiv_solve_W_u!`, except no unrolling, just a `W`x`W` block
     A11 =
       getfield(vload(spa, $(Unroll{1,1,W,2,W,zero(UInt),1})(($z, n))), :data)
