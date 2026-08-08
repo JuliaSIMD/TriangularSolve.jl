@@ -1304,7 +1304,10 @@ end
     end
   end
   for n = N:-1:1
-    for k = n+1:N
+    # descending k puts the freshest operand (A_{n+1}) last, so the older
+    # updates overlap its latency and the critical path stays one fma per
+    # column, matching `solve_AU`'s ascending-k order
+    for k = N:-1:n+1
       push!(
         q.args,
         :(
@@ -1362,7 +1365,7 @@ end
       Base.Cartesian.@nexprs $N n -> Amn_n = getfield(Amn, n)
     end
     for n = N:-1:1
-      for k = n+1:N
+      for k = N:-1:n+1
         push!(
           q.args,
           :(
@@ -1414,7 +1417,7 @@ end
       Base.Cartesian.@nexprs $N n -> Amn_n = getfield(Amn, n)
     end
     for n = N:-1:1
-      for k = n+1:N
+      for k = N:-1:n+1
         push!(
           q.args,
           :(
@@ -1497,10 +1500,15 @@ end
       )
     )
     Base.Cartesian.@nexprs $W c -> C11_c = C11[c]
-    for nk ∈ SafeCloseOpen(n + $W, nend) # nmuladd
-      A11 = vload(spc, $(Unroll{1,W,U,1,W,zero(UInt),1})(($(StaticInt(0)), nk)))
+    # zero-based induction (pointers pre-offset to the solved columns) so LLVM
+    # shares one scaled index across the broadcast streams, as in the forward
+    # kernels' `SafeCloseOpen(n)` loops
+    spck = gesp(spc, ($z, n + $W))
+    splk = gesp(spl, (n + $W, n))
+    for nk ∈ SafeCloseOpen(nend - n - $W) # nmuladd
+      A11 = vload(spck, $(Unroll{1,W,U,1,W,zero(UInt),1})(($(StaticInt(0)), nk)))
       Base.Cartesian.@nexprs $W c ->
-        C11_c = vfnmadd_fast(A11, vload(spl, (nk, n + (c - 1))), C11_c)
+        C11_c = vfnmadd_fast(A11, vload(splk, (nk, $z + (c - 1))), C11_c)
     end
     C11vu =
       solve_AL(VecUnroll((Base.Cartesian.@ntuple $W C11)), spl, n, $(Val(UNIT)))
@@ -1534,10 +1542,12 @@ end
       vload(spa, $(Unroll{2,1,W,1,W,(-1 % UInt),1})(($z, n)), mask)
     )
     Base.Cartesian.@nexprs $W c -> C11_c = C11[c]
-    for nk ∈ SafeCloseOpen(n + $W, nend) # nmuladd
-      A11 = vload(spc, ($(MM{W}(z)), nk), mask)
+    spck = gesp(spc, ($z, n + $W))
+    splk = gesp(spl, (n + $W, n))
+    for nk ∈ SafeCloseOpen(nend - n - $W) # nmuladd
+      A11 = vload(spck, ($(MM{W}(z)), nk), mask)
       Base.Cartesian.@nexprs $W c ->
-        C11_c = vfnmadd_fast(A11, vload(spl, (nk, n + (c - 1))), C11_c)
+        C11_c = vfnmadd_fast(A11, vload(splk, (nk, $z + (c - 1))), C11_c)
     end
     C11 = VecUnroll((Base.Cartesian.@ntuple $W C11))
     C11 = solve_AL(C11, spl, n, $(Val(UNIT)))
@@ -1819,10 +1829,15 @@ end
       :data
     )
     Base.Cartesian.@nexprs $W c -> A11_c = getfield(A11, c)
-    for nk ∈ SafeCloseOpen(n + $(W * U), nend) # nmuladd
-      L_ki = vload(spl, $(Unroll{2,W,U,2,W,zero(UInt),1})((nk, n)))
+    # zero-based induction (pointers pre-offset to the solved columns) so LLVM
+    # shares one scaled index across the broadcast streams, as in the forward
+    # kernels' `SafeCloseOpen(n)` loops
+    spck = gesp(spc, ($z, n + $(W * U)))
+    splk = gesp(spl, (n + $(W * U), n))
+    for nk ∈ SafeCloseOpen(nend - n - $(W * U)) # nmuladd
+      L_ki = vload(splk, $(Unroll{2,W,U,2,W,zero(UInt),1})((nk, $z)))
       Base.Cartesian.@nexprs $W c ->
-        A11_c = vfnmadd_fast(L_ki, vload(spc, (static(c - 1), nk)), A11_c)
+        A11_c = vfnmadd_fast(L_ki, vload(spck, (static(c - 1), nk)), A11_c)
     end
   end
   for u = U:-1:1
@@ -1843,7 +1858,7 @@ end
       push!(q.args, :($(Symbol(:X_, u, :_, c)) = getfield($(Symbol(:X_, u)), $c)))
     end
     # subtract the contributions of the already-solved sub-blocks to the right
-    for j = u+1:U
+    for j = U:-1:u+1
       for k = 1:W
         for c = 1:W
           push!(
@@ -1916,10 +1931,12 @@ end
     A11 =
       getfield(vload(spa, $(Unroll{1,1,W,2,W,zero(UInt),1})(($z, n))), :data)
     Base.Cartesian.@nexprs $W c -> A11_c = getfield(A11, c)
-    for nk ∈ SafeCloseOpen(n + $W, nend) # nmuladd
-      L_ki = vload(spl, (nk, $(MM{W})(n)))
+    spck = gesp(spc, ($z, n + $W))
+    splk = gesp(spl, (n + $W, n))
+    for nk ∈ SafeCloseOpen(nend - n - $W) # nmuladd
+      L_ki = vload(splk, (nk, $(MM{W}(z))))
       Base.Cartesian.@nexprs $W c ->
-        A11_c = vfnmadd_fast(L_ki, vload(spc, (static(c - 1), nk)), A11_c)
+        A11_c = vfnmadd_fast(L_ki, vload(spck, (static(c - 1), nk)), A11_c)
     end
     X = VectorizationBase.transpose_vecunroll(
       VecUnroll(Base.Cartesian.@ntuple $W A11)
@@ -1947,10 +1964,12 @@ end
     A11 =
       getfield(vload(spa, $(Unroll{1,1,R,2,W,zero(UInt),1})(($z, n))), :data)
     Base.Cartesian.@nexprs $R r -> A11_r = getfield(A11, r)
-    for nk ∈ SafeCloseOpen(n + $W, nend) # nmuladd
-      L_ki = vload(spl, (nk, $(MM{W})(n)))
+    spck = gesp(spc, ($z, n + $W))
+    splk = gesp(spl, (n + $W, n))
+    for nk ∈ SafeCloseOpen(nend - n - $W) # nmuladd
+      L_ki = vload(splk, (nk, $(MM{W}(z))))
       Base.Cartesian.@nexprs $R r ->
-        A11_r = vfnmadd_fast(L_ki, vload(spc, (static(r - 1), nk)), A11_r)
+        A11_r = vfnmadd_fast(L_ki, vload(spck, (static(r - 1), nk)), A11_r)
     end
   end
   # pad with zeros
