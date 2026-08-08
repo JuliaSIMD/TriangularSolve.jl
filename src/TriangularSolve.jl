@@ -748,76 +748,76 @@ function ldiv!(
 end
 
 function rdiv!(
-  A::AbstractMatrix{T},
-  L::LowerTriangular{T},
+  A::StridedMatrix{T},
+  L::LowerTriangular{T,<:StridedMatrix{T}},
   ::Val{true} = Val(true)
 ) where {T<:Union{Float32,Float64}}
   div_dispatch_L!(A, A, parent(L), _nthreads(), Val(false))
   return A
 end
 function rdiv!(
-  A::AbstractMatrix{T},
-  L::LowerTriangular{T},
+  A::StridedMatrix{T},
+  L::LowerTriangular{T,<:StridedMatrix{T}},
   ::Val{false}
 ) where {T<:Union{Float32,Float64}}
   div_dispatch_L!(A, A, parent(L), static(1), Val(false))
   return A
 end
 function rdiv!(
-  C::AbstractMatrix{T},
-  A::AbstractMatrix{T},
-  L::LowerTriangular{T},
+  C::StridedMatrix{T},
+  A::StridedMatrix{T},
+  L::LowerTriangular{T,<:StridedMatrix{T}},
   ::Val{true} = Val(true)
 ) where {T<:Union{Float32,Float64}}
   div_dispatch_L!(C, A, parent(L), _nthreads(), Val(false))
   return C
 end
 function rdiv!(
-  C::AbstractMatrix{T},
-  A::AbstractMatrix{T},
-  L::LowerTriangular{T},
+  C::StridedMatrix{T},
+  A::StridedMatrix{T},
+  L::LowerTriangular{T,<:StridedMatrix{T}},
   ::Val{false}
 ) where {T<:Union{Float32,Float64}}
   div_dispatch_L!(C, A, parent(L), static(1), Val(false))
   return C
 end
 function rdiv!(
-  A::AbstractMatrix{T},
-  L::UnitLowerTriangular{T},
+  A::StridedMatrix{T},
+  L::UnitLowerTriangular{T,<:StridedMatrix{T}},
   ::Val{true} = Val(true)
 ) where {T<:Union{Float32,Float64}}
   div_dispatch_L!(A, A, parent(L), _nthreads(), Val(true))
   return A
 end
 function rdiv!(
-  A::AbstractMatrix{T},
-  L::UnitLowerTriangular{T},
+  A::StridedMatrix{T},
+  L::UnitLowerTriangular{T,<:StridedMatrix{T}},
   ::Val{false}
 ) where {T<:Union{Float32,Float64}}
   div_dispatch_L!(A, A, parent(L), static(1), Val(true))
   return A
 end
 function rdiv!(
-  C::AbstractMatrix{T},
-  A::AbstractMatrix{T},
-  L::UnitLowerTriangular{T},
+  C::StridedMatrix{T},
+  A::StridedMatrix{T},
+  L::UnitLowerTriangular{T,<:StridedMatrix{T}},
   ::Val{true} = Val(true)
 ) where {T<:Union{Float32,Float64}}
   div_dispatch_L!(C, A, parent(L), _nthreads(), Val(true))
   return C
 end
 function rdiv!(
-  C::AbstractMatrix{T},
-  A::AbstractMatrix{T},
-  L::UnitLowerTriangular{T},
+  C::StridedMatrix{T},
+  A::StridedMatrix{T},
+  L::UnitLowerTriangular{T,<:StridedMatrix{T}},
   ::Val{false}
 ) where {T<:Union{Float32,Float64}}
   div_dispatch_L!(C, A, parent(L), static(1), Val(true))
   return C
 end
 function ldiv!(
-  U::UpperTriangular{T},
-  A::AbstractMatrix{T},
+  U::UpperTriangular{T,<:StridedMatrix{T}},
+  A::StridedMatrix{T},
   ::Val{true} = Val(true)
 ) where {T<:Union{Float32,Float64}}
   div_dispatch_L!(
@@ -830,8 +830,8 @@ function ldiv!(
   return A
 end
 function ldiv!(
-  U::UpperTriangular{T},
-  A::AbstractMatrix{T},
+  U::UpperTriangular{T,<:StridedMatrix{T}},
+  A::StridedMatrix{T},
   ::Val{false}
 ) where {T<:Union{Float32,Float64}}
   div_dispatch_L!(
@@ -844,9 +844,9 @@ function ldiv!(
   return A
 end
 function ldiv!(
-  C::AbstractMatrix{T},
-  U::UpperTriangular{T},
-  A::AbstractMatrix{T},
+  C::StridedMatrix{T},
+  U::UpperTriangular{T,<:StridedMatrix{T}},
+  A::StridedMatrix{T},
   ::Val{true} = Val(true)
 ) where {T<:Union{Float32,Float64}}
   div_dispatch_L!(
@@ -859,9 +859,9 @@ function ldiv!(
   return C
 end
 function ldiv!(
-  C::AbstractMatrix{T},
-  U::UpperTriangular{T},
-  A::AbstractMatrix{T},
+  C::StridedMatrix{T},
+  U::UpperTriangular{T,<:StridedMatrix{T}},
+  A::StridedMatrix{T},
   ::Val{false}
 ) where {T<:Union{Float32,Float64}}
   div_dispatch_L!(
@@ -874,8 +874,8 @@ function ldiv!(
   return C
 end
 function ldiv!(
-  U::UnitUpperTriangular{T},
-  A::AbstractMatrix{T},
+  U::UnitUpperTriangular{T,<:StridedMatrix{T}},
+  A::StridedMatrix{T},
   ::Val{true} = Val(true)
 ) where {T<:Union{Float32,Float64}}
   div_dispatch_L!(
@@ -888,8 +888,8 @@ function ldiv!(
   return A
 end
 function ldiv!(
-  U::UnitUpperTriangular{T},
-  A::AbstractMatrix{T},
+  U::UnitUpperTriangular{T,<:StridedMatrix{T}},
+  A::StridedMatrix{T},
   ::Val{false}
 ) where {T<:Union{Float32,Float64}}
   div_dispatch_L!(
@@ -902,9 +902,9 @@ function ldiv!(
   return A
 end
 function ldiv!(
-  C::AbstractMatrix{T},
-  U::UnitUpperTriangular{T},
-  A::AbstractMatrix{T},
+  C::StridedMatrix{T},
+  U::UnitUpperTriangular{T,<:StridedMatrix{T}},
+  A::StridedMatrix{T},
   ::Val{true} = Val(true)
 ) where {T<:Union{Float32,Float64}}
   div_dispatch_L!(
@@ -917,9 +917,9 @@ function ldiv!(
   return C
 end
 function ldiv!(
-  C::AbstractMatrix{T},
-  U::UnitUpperTriangular{T},
-  A::AbstractMatrix{T},
+  C::StridedMatrix{T},
+  U::UnitUpperTriangular{T,<:StridedMatrix{T}},
+  A::StridedMatrix{T},
   ::Val{false}
 ) where {T<:Union{Float32,Float64}}
   div_dispatch_L!(
@@ -1625,6 +1625,11 @@ function div_dispatch_L!(
   _M, _N = size(A)
   M = _canonicalize(_M)
   N = _canonicalize(_N)
+  if (size(L, 1) != N) | (size(L, 2) != N)
+    throw(DimensionMismatch("triangular matrix is $(size(L,1))×$(size(L,2)), needs $N×$N"))
+  elseif (size(C, 1) != M) | (size(C, 2) != N)
+    throw(DimensionMismatch("destination is $(size(C,1))×$(size(C,2)), needs $M×$N"))
+  end
   ((N == 0) | (M == 0)) && return nothing
   _spa, spap = stridedpointer_preserve(A)
   _spc, spcp = stridedpointer_preserve(C)

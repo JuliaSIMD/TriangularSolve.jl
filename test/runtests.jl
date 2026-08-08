@@ -133,6 +133,27 @@ end
       }
     end
   end
+  @testset "dimension mismatch throws" begin
+    @test_throws DimensionMismatch TriangularSolve.rdiv!(
+      rand(4, 8), LowerTriangular(rand(6, 6) + 6I), Val(false)
+    )
+    @test_throws DimensionMismatch TriangularSolve.ldiv!(
+      UpperTriangular(rand(6, 6) + 6I), rand(8, 3), Val(false)
+    )
+    @test_throws DimensionMismatch TriangularSolve.ldiv!(
+      rand(4, 3), UpperTriangular(rand(6, 6) + 6I), rand(6, 3), Val(false)
+    )
+  end
+  @testset "non-strided inputs keep the LinearAlgebra fallback" begin
+    # a Bidiagonal parent is an AbstractMatrix{Float64} but not strided; it
+    # must keep hitting the LinearAlgebra catch-all rather than the SIMD path
+    dv = rand(8) .+ 8
+    ev = rand(7)
+    Bd = Bidiagonal(dv, ev, :U)
+    B = rand(8, 4)
+    @test TriangularSolve.ldiv!(UpperTriangular(Bd), copy(B)) ≈
+          Matrix(UpperTriangular(Bd)) \ B
+  end
   @testset "allocations" begin
     n = 200
     U = UpperTriangular(rand(n, n) + n * I)
