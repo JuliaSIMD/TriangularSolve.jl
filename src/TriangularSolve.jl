@@ -932,6 +932,58 @@ function ldiv!(
   return C
 end
 
+# Vector right-hand sides reuse the matrix kernels: the left-division paths
+# already operate on `transpose(A)`, and for a vector `b` the required 1×n
+# transposed form is just `transpose(b)` — no reshape, no allocation. A single
+# right-hand side runs the kernels' scalar row-remainder, which beats BLAS
+# trsv up to the cutoff below (1.2-2.4x measured) but loses to trsv's blocked
+# sweep once the triangle falls out of L2, so larger solves keep the
+# LinearAlgebra path.
+const VECTOR_RHS_CUTOFF = 128
+
+for (wrap, dispatch, UNIT) in (
+  (:LowerTriangular, :div_dispatch!, false),
+  (:UnitLowerTriangular, :div_dispatch!, true),
+  (:UpperTriangular, :div_dispatch_L!, false),
+  (:UnitUpperTriangular, :div_dispatch_L!, true)
+)
+  @eval begin
+    function ldiv!(
+      U::$wrap{T,<:StridedMatrix{T}},
+      b::StridedVector{T},
+      ::Val{thread} = Val(true)
+    ) where {T<:Union{Float32,Float64},thread}
+      length(b) > VECTOR_RHS_CUTOFF && return LinearAlgebra.ldiv!(U, b)
+      nt = thread ? _nthreads() : static(1)
+      $dispatch(
+        transpose(b),
+        transpose(b),
+        transpose(parent(U)),
+        nt,
+        Val($UNIT)
+      )
+      return b
+    end
+    function ldiv!(
+      c::StridedVector{T},
+      U::$wrap{T,<:StridedMatrix{T}},
+      b::StridedVector{T},
+      ::Val{thread} = Val(true)
+    ) where {T<:Union{Float32,Float64},thread}
+      length(b) > VECTOR_RHS_CUTOFF && return LinearAlgebra.ldiv!(c, U, b)
+      nt = thread ? _nthreads() : static(1)
+      $dispatch(
+        transpose(c),
+        transpose(b),
+        transpose(parent(U)),
+        nt,
+        Val($UNIT)
+      )
+      return c
+    end
+  end
+end
+
 ldiv!(A, B, ::Val = Val(true)) = LinearAlgebra.ldiv!(A, B)
 ldiv!(Y, A, B, ::Val = Val(true)) = LinearAlgebra.ldiv!(Y, A, B)
 rdiv!(A, B, ::Val = Val(true)) = LinearAlgebra.rdiv!(A, B)
