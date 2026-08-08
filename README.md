@@ -17,8 +17,9 @@ unit-diagonal variants of each):
 
 Three-argument out-of-place forms (`rdiv!(C, A, U)`, `ldiv!(C, U, A)`) are also
 provided, and each method takes a trailing `Val(true)`/`Val(false)` argument
-controlling multithreading. Other element types and vector right-hand sides
-fall back to `LinearAlgebra`. For example:
+controlling multithreading. Vector right-hand sides run dedicated pure-Julia
+substitution sweeps (never BLAS); other element types fall back to
+`LinearAlgebra`. For example:
 ```julia
 julia> using TriangularSolve, LinearAlgebra, MKL;
 
