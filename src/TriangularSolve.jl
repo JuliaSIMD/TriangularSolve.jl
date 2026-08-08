@@ -747,6 +747,191 @@ function ldiv!(
   return C
 end
 
+function rdiv!(
+  A::StridedMatrix{T},
+  L::LowerTriangular{T,<:StridedMatrix{T}},
+  ::Val{true} = Val(true)
+) where {T<:Union{Float32,Float64}}
+  div_dispatch_L!(A, A, parent(L), _nthreads(), Val(false))
+  return A
+end
+function rdiv!(
+  A::StridedMatrix{T},
+  L::LowerTriangular{T,<:StridedMatrix{T}},
+  ::Val{false}
+) where {T<:Union{Float32,Float64}}
+  div_dispatch_L!(A, A, parent(L), static(1), Val(false))
+  return A
+end
+function rdiv!(
+  C::StridedMatrix{T},
+  A::StridedMatrix{T},
+  L::LowerTriangular{T,<:StridedMatrix{T}},
+  ::Val{true} = Val(true)
+) where {T<:Union{Float32,Float64}}
+  div_dispatch_L!(C, A, parent(L), _nthreads(), Val(false))
+  return C
+end
+function rdiv!(
+  C::StridedMatrix{T},
+  A::StridedMatrix{T},
+  L::LowerTriangular{T,<:StridedMatrix{T}},
+  ::Val{false}
+) where {T<:Union{Float32,Float64}}
+  div_dispatch_L!(C, A, parent(L), static(1), Val(false))
+  return C
+end
+function rdiv!(
+  A::StridedMatrix{T},
+  L::UnitLowerTriangular{T,<:StridedMatrix{T}},
+  ::Val{true} = Val(true)
+) where {T<:Union{Float32,Float64}}
+  div_dispatch_L!(A, A, parent(L), _nthreads(), Val(true))
+  return A
+end
+function rdiv!(
+  A::StridedMatrix{T},
+  L::UnitLowerTriangular{T,<:StridedMatrix{T}},
+  ::Val{false}
+) where {T<:Union{Float32,Float64}}
+  div_dispatch_L!(A, A, parent(L), static(1), Val(true))
+  return A
+end
+function rdiv!(
+  C::StridedMatrix{T},
+  A::StridedMatrix{T},
+  L::UnitLowerTriangular{T,<:StridedMatrix{T}},
+  ::Val{true} = Val(true)
+) where {T<:Union{Float32,Float64}}
+  div_dispatch_L!(C, A, parent(L), _nthreads(), Val(true))
+  return C
+end
+function rdiv!(
+  C::StridedMatrix{T},
+  A::StridedMatrix{T},
+  L::UnitLowerTriangular{T,<:StridedMatrix{T}},
+  ::Val{false}
+) where {T<:Union{Float32,Float64}}
+  div_dispatch_L!(C, A, parent(L), static(1), Val(true))
+  return C
+end
+function ldiv!(
+  U::UpperTriangular{T,<:StridedMatrix{T}},
+  A::StridedMatrix{T},
+  ::Val{true} = Val(true)
+) where {T<:Union{Float32,Float64}}
+  div_dispatch_L!(
+    transpose(A),
+    transpose(A),
+    transpose(parent(U)),
+    _nthreads(),
+    Val(false)
+  )
+  return A
+end
+function ldiv!(
+  U::UpperTriangular{T,<:StridedMatrix{T}},
+  A::StridedMatrix{T},
+  ::Val{false}
+) where {T<:Union{Float32,Float64}}
+  div_dispatch_L!(
+    transpose(A),
+    transpose(A),
+    transpose(parent(U)),
+    static(1),
+    Val(false)
+  )
+  return A
+end
+function ldiv!(
+  C::StridedMatrix{T},
+  U::UpperTriangular{T,<:StridedMatrix{T}},
+  A::StridedMatrix{T},
+  ::Val{true} = Val(true)
+) where {T<:Union{Float32,Float64}}
+  div_dispatch_L!(
+    transpose(C),
+    transpose(A),
+    transpose(parent(U)),
+    _nthreads(),
+    Val(false)
+  )
+  return C
+end
+function ldiv!(
+  C::StridedMatrix{T},
+  U::UpperTriangular{T,<:StridedMatrix{T}},
+  A::StridedMatrix{T},
+  ::Val{false}
+) where {T<:Union{Float32,Float64}}
+  div_dispatch_L!(
+    transpose(C),
+    transpose(A),
+    transpose(parent(U)),
+    static(1),
+    Val(false)
+  )
+  return C
+end
+function ldiv!(
+  U::UnitUpperTriangular{T,<:StridedMatrix{T}},
+  A::StridedMatrix{T},
+  ::Val{true} = Val(true)
+) where {T<:Union{Float32,Float64}}
+  div_dispatch_L!(
+    transpose(A),
+    transpose(A),
+    transpose(parent(U)),
+    _nthreads(),
+    Val(true)
+  )
+  return A
+end
+function ldiv!(
+  U::UnitUpperTriangular{T,<:StridedMatrix{T}},
+  A::StridedMatrix{T},
+  ::Val{false}
+) where {T<:Union{Float32,Float64}}
+  div_dispatch_L!(
+    transpose(A),
+    transpose(A),
+    transpose(parent(U)),
+    static(1),
+    Val(true)
+  )
+  return A
+end
+function ldiv!(
+  C::StridedMatrix{T},
+  U::UnitUpperTriangular{T,<:StridedMatrix{T}},
+  A::StridedMatrix{T},
+  ::Val{true} = Val(true)
+) where {T<:Union{Float32,Float64}}
+  div_dispatch_L!(
+    transpose(C),
+    transpose(A),
+    transpose(parent(U)),
+    _nthreads(),
+    Val(true)
+  )
+  return C
+end
+function ldiv!(
+  C::StridedMatrix{T},
+  U::UnitUpperTriangular{T,<:StridedMatrix{T}},
+  A::StridedMatrix{T},
+  ::Val{false}
+) where {T<:Union{Float32,Float64}}
+  div_dispatch_L!(
+    transpose(C),
+    transpose(A),
+    transpose(parent(U)),
+    static(1),
+    Val(true)
+  )
+  return C
+end
+
 ldiv!(A, B, ::Val = Val(true)) = LinearAlgebra.ldiv!(A, B)
 ldiv!(Y, A, B, ::Val = Val(true)) = LinearAlgebra.ldiv!(Y, A, B)
 rdiv!(A, B, ::Val = Val(true)) = LinearAlgebra.rdiv!(A, B)
@@ -1082,6 +1267,902 @@ function _ldiv_L!(
   # remainder on `m`
   m < M && ldiv_remainder!(spc, spa, spu, M, N, m, Nr, WS, Val(UNIT))
   # m < M && ldiv_remainder!(spc, spa, spu, M, N, m, Nr, WS, UF, Val(UNIT))
+  nothing
+end
+
+# Backward-substitution family: right-lower division `C = A / L` with `L` lower
+# triangular, the dual of the right-upper `rdiv!` kernels above. Column blocks
+# are solved last-to-first; within and across blocks every load/store uses
+# ascending (positive-stride) indices, only block offsets descend.
+# `ldiv!(::UpperTriangular, A)` is obtained from this family for free via
+# `U \ B = (B' / U')'`, mirroring how `ldiv!(::LowerTriangular, A)` reuses the
+# right-upper kernels.
+
+# Solve `X * L = A` for the diagonal block `L[noff .+ (0:N-1), noff .+ (0:N-1)]`:
+# X_n = (A_n - \sum_{k>n} X_k L_{k,n}) / L_{n,n}, iterating n = N, N-1, ..., 1.
+@generated function solve_AL(
+  A::VecUnroll{Nm1},
+  spl::AbstractStridedPointer,
+  noff,
+  ::Val{UNIT}
+) where {Nm1,UNIT}
+  N = Nm1 + 1
+  q = quote
+    $(Expr(:meta, :inline))
+    Ad = VectorizationBase.data(A)
+  end
+  for n = 1:N
+    push!(q.args, :($(Symbol(:A_, n)) = Ad[$n]))
+    for m = (UNIT ? n + 1 : n):N
+      push!(
+        q.args,
+        :(
+          $(Symbol(:L_, m, :_, n)) =
+            vload(spl, (noff + $(m - 1), noff + $(n - 1)))
+        )
+      )
+    end
+  end
+  for n = N:-1:1
+    for k = n+1:N
+      push!(
+        q.args,
+        :(
+          $(Symbol(:A_, n)) = vfnmadd_fast(
+            $(Symbol(:A_, k)),
+            $(Symbol(:L_, k, :_, n)),
+            $(Symbol(:A_, n))
+          )
+        )
+      )
+    end
+    UNIT || push!(
+      q.args,
+      :(
+        $(Symbol(:A_, n)) =
+          Base.FastMath.div_fast($(Symbol(:A_, n)), $(Symbol(:L_, n, :_, n)))
+      )
+    )
+  end
+  push!(
+    q.args,
+    Expr(:call, :VecUnroll, Expr(:tuple, [Symbol(:A_, n) for n = 1:N]...))
+  )
+  q
+end
+
+# Standalone solve of the trailing `N`-column block against the lower-triangular
+# diagonal block at the pointers' origin (callers `gesp` to the block).
+@generated function BdivL_small_kern!(
+  spa::AbstractStridedPointer{T},
+  sp,
+  spb::AbstractStridedPointer{T},
+  spl::AbstractStridedPointer{T},
+  ::StaticInt{N},
+  mask::AbstractMask{W},
+  ::Val{UNIT}
+) where {T,UNIT,W,N}
+  z = static(0)
+  if N == 1
+    i = (MM{W}(z), z)
+    Amn = :(vload(spb, $i, mask))
+    if !UNIT
+      Amn = :($Amn / vload(spl, $((z, z))))
+    end
+    quote
+      $(Expr(:meta, :inline))
+      store_small_kern!(spa, sp, $Amn, $i, mask)
+    end
+  else
+    unroll = Unroll{2,1,N,1,W,(-1 % UInt),1}((z, z))
+    tostore = :(VecUnroll(Base.Cartesian.@ntuple $N Amn))
+    q = quote
+      $(Expr(:meta, :inline))
+      Amn = getfield(vload(spb, $unroll, mask), :data)
+      Base.Cartesian.@nexprs $N n -> Amn_n = getfield(Amn, n)
+    end
+    for n = N:-1:1
+      for k = n+1:N
+        push!(
+          q.args,
+          :(
+            $(Symbol(:Amn_, n)) = vfnmadd_fast(
+              $(Symbol(:Amn_, k)),
+              vload(spl, ($(k - 1), $(n - 1))),
+              $(Symbol(:Amn_, n))
+            )
+          )
+        )
+      end
+      UNIT || push!(
+        q.args,
+        :($(Symbol(:Amn_, n)) /= vload(spl, ($(n - 1), $(n - 1))))
+      )
+    end
+    push!(q.args, :(store_small_kern!(spa, sp, $tostore, $unroll, mask)))
+    q
+  end
+end
+@generated function BdivL_small_kern_u!(
+  spa::AbstractStridedPointer{T},
+  sp,
+  spb::AbstractStridedPointer{T},
+  spl::AbstractStridedPointer{T},
+  ::StaticInt{N},
+  ::StaticInt{U},
+  ::Val{UNIT},
+  ::StaticInt{W}
+) where {T,U,UNIT,N,W}
+  z = static(0)
+  if N == 1
+    unroll = Unroll{1,W,U,1,W,zero(UInt),1}((z, z))
+    Amn = :(vload(spb, $unroll))
+    if !UNIT
+      Amn = :($Amn / vload(spl, $((z, z))))
+    end
+    quote
+      $(Expr(:meta, :inline))
+      store_small_kern!(spa, sp, $Amn, $unroll)
+    end
+  else
+    double_unroll =
+      Unroll{2,1,N,1,W,zero(UInt),1}(Unroll{1,W,U,1,W,zero(UInt),1}((z, z)))
+    tostore = :(VecUnroll(Base.Cartesian.@ntuple $N Amn))
+    q = quote
+      $(Expr(:meta, :inline))
+      Amn = getfield(vload(spb, $double_unroll), :data)
+      Base.Cartesian.@nexprs $N n -> Amn_n = getfield(Amn, n)
+    end
+    for n = N:-1:1
+      for k = n+1:N
+        push!(
+          q.args,
+          :(
+            $(Symbol(:Amn_, n)) = vfnmadd_fast(
+              $(Symbol(:Amn_, k)),
+              vload(spl, ($(k - 1), $(n - 1))),
+              $(Symbol(:Amn_, n))
+            )
+          )
+        )
+      end
+      UNIT || push!(
+        q.args,
+        :($(Symbol(:Amn_, n)) /= vload(spl, ($(n - 1), $(n - 1))))
+      )
+    end
+    push!(q.args, :(store_small_kern!(spa, sp, $tostore, $double_unroll)))
+    q
+  end
+end
+@generated function BdivL_small_kern!(
+  spa::AbstractStridedPointer{T},
+  sp,
+  spb::AbstractStridedPointer{T},
+  spl::AbstractStridedPointer{T},
+  Nr::Int,
+  mask::AbstractMask{W},
+  ::Val{UNIT}
+) where {T,UNIT,W}
+  quote
+    # $(Expr(:meta, :inline))
+    Base.Cartesian.@nif $(W - 1) n -> n == Nr n ->
+      BdivL_small_kern!(spa, sp, spb, spl, static(n), mask, $(Val(UNIT)))
+  end
+end
+@generated function BdivL_small_kern_u!(
+  spa::AbstractStridedPointer{T},
+  sp,
+  spb::AbstractStridedPointer{T},
+  spl::AbstractStridedPointer{T},
+  Nr::Int,
+  ::StaticInt{U},
+  ::Val{UNIT},
+  ::StaticInt{W}
+) where {T,U,UNIT,W}
+  su = static(U)
+  vu = Val(UNIT)
+  sw = static(W)
+  quote
+    # $(Expr(:meta, :inline))
+    Base.Cartesian.@nif $(W - 1) n -> n == Nr n ->
+      BdivL_small_kern_u!(spa, sp, spb, spl, static(n), $su, $vu, $sw)
+  end
+end
+
+@generated function rdiv_solve_W_u_L!(
+  spc,
+  spb,
+  spa,
+  spl,
+  n,
+  nend,
+  ::StaticInt{W},
+  ::StaticInt{U},
+  ::Val{UNIT}
+) where {W,U,UNIT}
+  z = static(0)
+  quote
+    $(Expr(:meta, :inline))
+    # C = A / L; C * L = A
+    # C_{i,j} = (A_{i,j} - \sum_{k=j+1}^{N} C_{i,k}L_{k,j}) / L_{j,j}
+    # Solves the block C_{i+[0,W*U), n+[0,W)}; columns [n+W, nend) were already
+    # solved, so the reduction runs over them before the diagonal-block solve.
+    C11 = VectorizationBase.data(
+      vload(
+        spa,
+        $(Unroll{2,1,W,1,W,zero(UInt),1})(
+          $(Unroll{1,W,U,1,W,zero(UInt),1})(($z, n))
+        )
+      )
+    )
+    Base.Cartesian.@nexprs $W c -> C11_c = C11[c]
+    for nk ∈ SafeCloseOpen(n + $W, nend) # nmuladd
+      A11 = vload(spc, $(Unroll{1,W,U,1,W,zero(UInt),1})(($(StaticInt(0)), nk)))
+      Base.Cartesian.@nexprs $W c ->
+        C11_c = vfnmadd_fast(A11, vload(spl, (nk, n + (c - 1))), C11_c)
+    end
+    C11vu =
+      solve_AL(VecUnroll((Base.Cartesian.@ntuple $W C11)), spl, n, $(Val(UNIT)))
+    i = $(Unroll{2,1,W,1,W,zero(UInt),1})(
+      $(Unroll{1,W,U,1,W,zero(UInt),1})(($z, n))
+    )
+    vstore!(spc, C11vu, i)
+    maybestore!(spb, C11vu, i)
+  end
+end
+@generated function rdiv_solve_W_L!(
+  spc,
+  spb,
+  spa,
+  spl,
+  n,
+  nend,
+  storec::B,
+  mask::AbstractMask{W},
+  ::Val{UNIT}
+) where {W,UNIT,B}
+  storecexpr = if (B <: Bool)
+    :(storec && vstore!(spc, C11, i, mask))
+  else
+    :(vstore!(spc, C11, i, mask))
+  end
+  z = static(0)
+  quote
+    $(Expr(:meta, :inline))
+    C11 = VectorizationBase.data(
+      vload(spa, $(Unroll{2,1,W,1,W,(-1 % UInt),1})(($z, n)), mask)
+    )
+    Base.Cartesian.@nexprs $W c -> C11_c = C11[c]
+    for nk ∈ SafeCloseOpen(n + $W, nend) # nmuladd
+      A11 = vload(spc, ($(MM{W}(z)), nk), mask)
+      Base.Cartesian.@nexprs $W c ->
+        C11_c = vfnmadd_fast(A11, vload(spl, (nk, n + (c - 1))), C11_c)
+    end
+    C11 = VecUnroll((Base.Cartesian.@ntuple $W C11))
+    C11 = solve_AL(C11, spl, n, $(Val(UNIT)))
+    i = $(Unroll{2,1,W,1,W,(-1 % UInt),1})(($z, n))
+    $storecexpr
+    maybestore!(spb, C11, i, mask)
+  end
+end
+
+@inline function rdiv_L!(
+  spc::AbstractStridedPointer{T},
+  spa::AbstractStridedPointer,
+  spl::AbstractStridedPointer,
+  M,
+  N,
+  ::Val{UNIT}
+) where {T,UNIT}
+  WS = pick_vector_width(T)
+  W = Int(WS)
+  UF = unroll_factor(WS)
+  WU = UF * WS
+  Nd, Nr = VectorizationBase.vdivrem(N, WS)
+  Nrstart = N - Nr # trailing remainder columns [Nrstart, N) are solved first
+  spl_diag = gesp(spl, (Nrstart, Nrstart))
+  m = 0
+  if UF > 1
+    while m < M - WU + 1
+      if Nr > 0
+        BdivL_small_kern_u!(
+          gesp(spc, (StaticInt(0), Nrstart)),
+          nothing,
+          gesp(spa, (StaticInt(0), Nrstart)),
+          spl_diag,
+          Nr,
+          UF,
+          Val(UNIT),
+          WS
+        )
+      end
+      n = Nrstart
+      for _ ∈ 1:Nd
+        n -= W
+        rdiv_solve_W_u_L!(spc, nothing, spa, spl, n, N, WS, UF, Val(UNIT))
+      end
+      m += WU
+      spa = gesp(spa, (WU, StaticInt(0)))
+      spc = gesp(spc, (WU, StaticInt(0)))
+    end
+  end
+  finalmask = VectorizationBase.mask(WS, M)
+  while m < M
+    ubm = m + W
+    nomaskiter = ubm < M
+    mask = nomaskiter ? VectorizationBase.max_mask(WS) : finalmask
+    if Nr > 0
+      BdivL_small_kern!(
+        gesp(spc, (StaticInt(0), Nrstart)),
+        nothing,
+        gesp(spa, (StaticInt(0), Nrstart)),
+        spl_diag,
+        Nr,
+        mask,
+        Val(UNIT)
+      )
+    end
+    n = Nrstart
+    for _ ∈ 1:Nd
+      n -= W
+      rdiv_solve_W_L!(spc, nothing, spa, spl, n, N, nothing, mask, Val(UNIT))
+    end
+    spa = gesp(spa, (WS, StaticInt(0)))
+    spc = gesp(spc, (WS, StaticInt(0)))
+    m = ubm
+  end
+  nothing
+end
+
+function div_dispatch_L!(
+  C::AbstractMatrix{T},
+  A,
+  L,
+  nthread,
+  ::Val{UNIT}
+) where {UNIT,T}
+  _M, _N = size(A)
+  M = _canonicalize(_M)
+  N = _canonicalize(_N)
+  if (size(L, 1) != N) | (size(L, 2) != N)
+    throw(DimensionMismatch("triangular matrix is $(size(L,1))×$(size(L,2)), needs $N×$N"))
+  elseif (size(C, 1) != M) | (size(C, 2) != N)
+    throw(DimensionMismatch("destination is $(size(C,1))×$(size(C,2)), needs $M×$N"))
+  end
+  ((N == 0) | (M == 0)) && return nothing
+  _spa, spap = stridedpointer_preserve(A)
+  _spc, spcp = stridedpointer_preserve(C)
+  _spl, splp = stridedpointer_preserve(L)
+  spa = zero_offsets(_spa)
+  spc = zero_offsets(_spc)
+  spl = zero_offsets(_spl)
+  GC.@preserve spap spcp splp begin
+    mtb = m_thread_block_size(M, N, nthread, Val(T))
+    if nthread > 1
+      (M > mtb) &&
+        return multithread_rdiv_L!(spc, spa, spl, M, N, mtb, Val(UNIT))
+    elseif N > block_size(Val(T))
+      return rdiv_block_MandN_L!(spc, spa, spl, M, N, Val(UNIT))
+    end
+    return rdiv_L!(spc, spa, spl, M, N, Val(UNIT))
+  end
+end
+
+# Writes `spd[m, n] = spa[m, n] - sum_k spc[m, k] * spl[k, n]`, where `spc`
+# points at the already-solved trailing columns and `spd` at the block being
+# prepared for its triangular solve (`spc`/`spd` alias disjoint column ranges).
+nmuladd_L!(spc, spa, spl, spd, M, K, N) =
+  @turbo for n ∈ CloseOpen(N), m ∈ CloseOpen(M)
+    Cmn = spa[m, n]
+    for k ∈ CloseOpen(K)
+      Cmn -= spc[m, k] * spl[k, n]
+    end
+    spd[m, n] = Cmn
+  end
+
+function rdiv_block_N_L!(
+  spc::AbstractStridedPointer{T},
+  spa,
+  spl,
+  M,
+  N,
+  ::Val{UNIT},
+  Bsize = nothing
+) where {T,UNIT}
+  W = VectorizationBase.pick_vector_width(T)
+  B_normalized =
+    Bsize === nothing ?
+    VectorizationBase.vcld(
+      N,
+      VectorizationBase.vcld(N, block_size(Val(T))) * W
+    ) * W : Bsize
+  repeat = N > B_normalized
+  N_temp = Core.ifelse(repeat, B_normalized, N)
+  nstart = N - N_temp
+  rdiv_L!(
+    gesp(spc, (StaticInt(0), nstart)),
+    gesp(spa, (StaticInt(0), nstart)),
+    gesp(spl, (nstart, nstart)),
+    M,
+    N_temp,
+    Val{UNIT}()
+  )
+  repeat || return nothing
+  while nstart > 0
+    ns = nstart
+    N_temp = min(B_normalized, ns)
+    nstart = ns - N_temp
+    nmuladd_L!(
+      gesp(spc, (StaticInt(0), ns)),
+      gesp(spa, (StaticInt(0), nstart)),
+      gesp(spl, (ns, nstart)),
+      gesp(spc, (StaticInt(0), nstart)),
+      M,
+      N - ns,
+      N_temp
+    )
+    rdiv_L!(
+      gesp(spc, (StaticInt(0), nstart)),
+      gesp(spc, (StaticInt(0), nstart)),
+      gesp(spl, (nstart, nstart)),
+      M,
+      N_temp,
+      Val{UNIT}()
+    )
+  end
+  nothing
+end
+function rdiv_block_MandN_L!(
+  spc::AbstractStridedPointer{T,<:Any,XC},
+  spa::AbstractStridedPointer{T,<:Any,XA},
+  spl::AbstractStridedPointer{T,<:Any,XL},
+  M,
+  N,
+  ::Val{UNIT}
+) where {T,UNIT,XC,XA,XL}
+  B = block_size(Val(T))
+  W = VectorizationBase.pick_vector_width(T)
+  WUF = XC == XA == XL == 2 ? W : W * unroll_factor(W)
+  B_m = VectorizationBase.vcld(M, VectorizationBase.vcld(M, B) * WUF) * WUF
+  m = 0
+  while m < M
+    mu = m + B_m
+    Mtemp = min(M, mu) - m
+    rdiv_block_N_L!(
+      spc,
+      spa,
+      spl,
+      Mtemp,
+      N,
+      Val{UNIT}(),
+      VectorizationBase.vcld(N, VectorizationBase.vcld(N, B) * W) * W
+    )
+    spa = gesp(spa, (B_m, StaticInt{0}()))
+    spc = gesp(spc, (B_m, StaticInt{0}()))
+    m = mu
+  end
+  nothing
+end
+
+struct RDivBlockMandNv2L{UNIT} end
+function (f::RDivBlockMandNv2L{UNIT})(
+  allargs,
+  blockstart,
+  blockstop
+) where {UNIT}
+  spc, spa, spl, N, Mrem, Nblock, mtb = allargs
+  for block = blockstart-1:blockstop-1
+    rdiv_block_MandN_L!(
+      gesp(spc, (mtb * block, StaticInt{0}())),
+      gesp(spa, (mtb * block, StaticInt{0}())),
+      spl,
+      Core.ifelse(block == Nblock - 1, Mrem, mtb),
+      N,
+      Val{UNIT}()
+    )
+  end
+end
+
+function multithread_rdiv_L!(
+  spc::AbstractStridedPointer{TC},
+  spa::AbstractStridedPointer{TA},
+  spl::AbstractStridedPointer{TL},
+  M::Int,
+  N::Int,
+  mtb::Int,
+  ::Val{UNIT}
+) where {UNIT,TC,TA,TL}
+  (Md, Mr) = VectorizationBase.vdivrem(M, mtb)
+  Nblock = Md + (Mr ≠ 0)
+  Mrem = Core.ifelse(Mr ≠ 0, Mr, mtb)
+  batch(
+    RDivBlockMandNv2L{UNIT}(),
+    (Nblock, min(Nblock, Threads.nthreads())),
+    spc,
+    spa,
+    spl,
+    N,
+    Mrem,
+    Nblock,
+    mtb
+  )
+  nothing
+end
+
+@generated function uldiv_solve_W_u!(
+  spc,
+  spa,
+  spl,
+  n,
+  nend,
+  ::StaticInt{W},
+  ::StaticInt{U},
+  ::Val{UNIT}
+) where {W,U,UNIT}
+  z = static(0)
+  q = quote
+    # C = A / L in the transposed (row-major) layout; equivalently, C' = L' \ A'
+    # with L' upper triangular — backward substitution for the left-upper solve.
+    # Solves the block C_{j+[0,W), n+[0,W*U)}; columns [n+W*U, nend) are already
+    # solved, so the reduction runs over them, then the W*U block columns are
+    # solved right-to-left in W-sized sub-blocks against L's diagonal block.
+    # outer unroll are `W` rows
+    # Inner unroll are `W*U` columns (U simd vecs)
+    A11 = getfield(
+      vload(
+        spa,
+        $(Unroll{1,1,W,2,W,zero(UInt),1})(
+          $(Unroll{2,W,U,2,W,zero(UInt),1})(($z, n))
+        )
+      ),
+      :data
+    )
+    Base.Cartesian.@nexprs $W c -> A11_c = getfield(A11, c)
+    for nk ∈ SafeCloseOpen(n + $(W * U), nend) # nmuladd
+      L_ki = vload(spl, $(Unroll{2,W,U,2,W,zero(UInt),1})((nk, n)))
+      Base.Cartesian.@nexprs $W c ->
+        A11_c = vfnmadd_fast(L_ki, vload(spc, (static(c - 1), nk)), A11_c)
+    end
+  end
+  for u = U:-1:1
+    Xtup = Expr(:tuple)
+    for w = 1:W
+      push!(Xtup.args, :(getfield(getfield($(Symbol(:A11_, w)), :data), $u)))
+    end
+    push!(
+      q.args,
+      :(
+        $(Symbol(:X_, u)) = getfield(
+          VectorizationBase.transpose_vecunroll(VecUnroll($Xtup)),
+          :data
+        )
+      )
+    )
+    for c = 1:W
+      push!(q.args, :($(Symbol(:X_, u, :_, c)) = getfield($(Symbol(:X_, u)), $c)))
+    end
+    # subtract the contributions of the already-solved sub-blocks to the right
+    for j = u+1:U
+      for k = 1:W
+        for c = 1:W
+          push!(
+            q.args,
+            :(
+              $(Symbol(:X_, u, :_, c)) = vfnmadd_fast(
+                $(Symbol(:C_, j, :_, k)),
+                vload(
+                  spl,
+                  (
+                    n + $((k - 1) + (j - 1) * W),
+                    n + $((c - 1) + (u - 1) * W)
+                  )
+                ),
+                $(Symbol(:X_, u, :_, c))
+              )
+            )
+          )
+        end
+      end
+    end
+    Xtup2 = Expr(:tuple)
+    for c = 1:W
+      push!(Xtup2.args, Symbol(:X_, u, :_, c))
+    end
+    push!(
+      q.args,
+      :(
+        $(Symbol(:C_, u)) = solve_AL(
+          VecUnroll($Xtup2),
+          spl,
+          n + $((u - 1) * W),
+          $(Val(UNIT))
+        )
+      )
+    )
+    push!(q.args, :($(Symbol(:Cdata_, u)) = getfield($(Symbol(:C_, u)), :data)))
+    for c = 1:W
+      push!(
+        q.args,
+        :($(Symbol(:C_, u, :_, c)) = getfield($(Symbol(:Cdata_, u)), $c))
+      )
+    end
+  end
+  # store at end (no aliasing)
+  for u = 1:U
+    push!(
+      q.args,
+      :(vstore!(
+        spc,
+        $(Symbol(:C_, u)),
+        $(Unroll{2,1,W,1,W,zero(UInt),1})(($z, n + $((u - 1) * W)))
+      ))
+    )
+  end
+  q
+end
+@generated function uldiv_solve_W!(
+  spc,
+  spa,
+  spl,
+  n,
+  nend,
+  ::StaticInt{W},
+  ::Val{UNIT}
+) where {W,UNIT}
+  z = static(0)
+  quote
+    # Like `uldiv_solve_W_u!`, except no unrolling, just a `W`x`W` block
+    A11 =
+      getfield(vload(spa, $(Unroll{1,1,W,2,W,zero(UInt),1})(($z, n))), :data)
+    Base.Cartesian.@nexprs $W c -> A11_c = getfield(A11, c)
+    for nk ∈ SafeCloseOpen(n + $W, nend) # nmuladd
+      L_ki = vload(spl, (nk, $(MM{W})(n)))
+      Base.Cartesian.@nexprs $W c ->
+        A11_c = vfnmadd_fast(L_ki, vload(spc, (static(c - 1), nk)), A11_c)
+    end
+    X = VectorizationBase.transpose_vecunroll(
+      VecUnroll(Base.Cartesian.@ntuple $W A11)
+    )
+    C_u = solve_AL(X, spl, n, $(Val(UNIT)))
+    vstore!(spc, C_u, $(Unroll{2,1,W,1,W,zero(UInt),1})(($z, n)))
+  end
+end
+@generated function uldiv_solve_W!(
+  spc,
+  spa,
+  spl,
+  n,
+  nend,
+  ::StaticInt{W},
+  ::Val{UNIT},
+  ::StaticInt{R}
+) where {W,UNIT,R}
+  R <= 1 && throw("Remainder of `<= 1` shouldn't be called, but had $R.")
+  R >= W && throw("Remainder of `>= $W` shouldn't be called, but had $R.")
+  z = static(0)
+  q = quote
+    # Like the `R`-remainder `ldiv_solve_W!`, but backward: solves the block
+    # C_{j+[0,R), n+[0,W)} with columns [n+W, nend) already solved.
+    A11 =
+      getfield(vload(spa, $(Unroll{1,1,R,2,W,zero(UInt),1})(($z, n))), :data)
+    Base.Cartesian.@nexprs $R r -> A11_r = getfield(A11, r)
+    for nk ∈ SafeCloseOpen(n + $W, nend) # nmuladd
+      L_ki = vload(spl, (nk, $(MM{W})(n)))
+      Base.Cartesian.@nexprs $R r ->
+        A11_r = vfnmadd_fast(L_ki, vload(spc, (static(r - 1), nk)), A11_r)
+    end
+  end
+  # pad with zeros
+  Wpad = VectorizationBase.nextpow2(R)
+  t = Expr(:tuple)
+  for r = 1:R
+    push!(t.args, Symbol(:A11_, r))
+  end
+  for _ = R+1:Wpad
+    push!(t.args, :(zero(A11_1)))
+  end
+  q2 = quote
+    X = VectorizationBase.transpose_vecunroll(VecUnroll($t))
+    C_u = solve_AL(X, spl, n, $(Val(UNIT)))
+  end
+  push!(q.args, q2)
+  q3 = if R == Wpad
+    quote
+      i = $(Unroll{2,1,W,1,Wpad,zero(UInt),1})(($z, n))
+      vstore!(spc, C_u, i)
+    end
+  else
+    quote
+      mask = VectorizationBase.mask($(static(Wpad)), $(static(R)))
+      i = $(Unroll{2,1,W,1,Wpad,(-1 % UInt),1})(($z, n))
+      vstore!(spc, C_u, i, mask)
+    end
+  end
+  push!(q.args, q3)
+  return q
+end
+
+@generated function _uldiv_remainder!(
+  spc,
+  spa,
+  spl,
+  M,
+  N,
+  m,
+  Nr,
+  ::StaticInt{W},
+  ::Val{UNIT},
+  ::StaticInt{r}
+) where {W,UNIT,r}
+  r <= 0 && throw("Remainder of `<= 0` shouldn't be called, but had $r.")
+  r >= W && throw("Remainder of `>= $W` shouldn't be called, but had $r.")
+  if r == 1
+    z = static(0)
+    sub = Base.FastMath.sub_fast
+    mul = Base.FastMath.mul_fast
+    div = Base.FastMath.div_fast
+    vlxj = :(vload(spc, ($z, j)))
+    if UNIT
+      vlxj = :(xj = $vlxj)
+    else
+      vlxj = quote
+        xj = $div($vlxj, vload(spl, (j, j)))
+        vstore!(spc, xj, ($z, j))
+      end
+    end
+    quote
+      $(Expr(:meta, :inline))
+      if pointer(spc) != pointer(spa)
+        for n = 0:N-1
+          vstore!(spc, vload(spa, ($z, n)), ($z, n))
+        end
+      end
+      for j = N-1:-1:0
+        $vlxj
+        for i = 0:j-1
+          xi = vload(spc, ($z, i))
+          Lji = vload(spl, (j, i))
+          vstore!(spc, $sub(xi, $mul(xj, Lji)), ($z, i))
+        end
+      end
+    end
+  else
+    WS = static(W)
+    quote
+      $(Expr(:meta, :inline))
+      n = N - Nr
+      if Nr > 0
+        mask = $(VectorizationBase.mask(WS, r))
+        BdivL_small_kern!(
+          gesp(spc, (StaticInt(0), n)),
+          nothing,
+          gesp(spa, (StaticInt(0), n)),
+          gesp(spl, (n, n)),
+          Nr,
+          mask,
+          $(Val(UNIT))
+        )
+      end
+      while n != 0
+        n -= $W
+        uldiv_solve_W!(spc, spa, spl, n, N, $WS, $(Val(UNIT)), $(StaticInt(r)))
+      end
+    end
+  end
+end
+@generated function uldiv_remainder!(
+  spc,
+  spa,
+  spl,
+  M,
+  N,
+  m,
+  Nr,
+  ::StaticInt{W},
+  ::Val{UNIT}
+) where {W,UNIT}
+  WS = static(W)
+  if W == 2
+    quote
+      $(Expr(:meta, :inline))
+      _uldiv_remainder!(
+        spc,
+        spa,
+        spl,
+        M,
+        N,
+        m,
+        Nr,
+        $WS,
+        $(Val(UNIT)),
+        $(static(1))
+      )
+    end
+  else
+    quote
+      # $(Expr(:meta, :inline))
+      Base.Cartesian.@nif $(W - 1) w -> m == M - w w -> _uldiv_remainder!(
+        spc,
+        spa,
+        spl,
+        M,
+        N,
+        m,
+        Nr,
+        $WS,
+        $(Val(UNIT)),
+        StaticInt(w)
+      )
+    end
+  end
+end
+@inline function rdiv_L!(
+  spc::AbstractStridedPointer{T,2,2},
+  spa::AbstractStridedPointer{T,2,2},
+  spl::AbstractStridedPointer{T,2,2},
+  M,
+  N,
+  ::Val{UNIT}
+) where {T,UNIT}
+  tup = (spc, spa, spl)
+  _ldiv_U!(
+    M,
+    N,
+    Val(UNIT),
+    typeof(tup),
+    LoopVectorization.flatten_to_tuple(tup)...
+  )
+end
+
+# spc = spa / spl with the pointers transposed (row-major)
+# spc' = (spl' \ spa')'
+# This is the left-upper ldiv
+function _ldiv_U!(
+  M,
+  N,
+  ::Val{UNIT},
+  ::Type{Args},
+  args::Vararg{Any,K}
+) where {UNIT,Args,K}
+  spc, spa, spl = LoopVectorization.reassemble_tuple(Args, args)
+  T = eltype(spc)
+  WS = pick_vector_width(T)
+  W = Int(WS)
+  UF = unroll_factor(WS)
+  WU = UF * WS
+  Nd, Nr = VectorizationBase.vdivrem(N, WS)
+  Nrstart = N - Nr # trailing remainder columns [Nrstart, N) are solved first
+  m = 0
+  # m, no remainder
+  while m < M - WS + 1
+    if Nr > 0
+      BdivL_small_kern_u!(
+        gesp(spc, (StaticInt(0), Nrstart)),
+        nothing,
+        gesp(spa, (StaticInt(0), Nrstart)),
+        gesp(spl, (Nrstart, Nrstart)),
+        Nr,
+        StaticInt(1),
+        Val(UNIT),
+        WS
+      )
+    end
+    n = Nrstart
+    while n >= WU
+      n -= WU
+      uldiv_solve_W_u!(spc, spa, spl, n, N, WS, UF, Val(UNIT))
+    end
+    while n != 0
+      n -= W
+      uldiv_solve_W!(spc, spa, spl, n, N, WS, Val(UNIT))
+    end
+    m += W
+    spa = gesp(spa, (W, StaticInt(0)))
+    spc = gesp(spc, (W, StaticInt(0)))
+  end
+  # remainder on `m`
+  m < M && uldiv_remainder!(spc, spa, spl, M, N, m, Nr, WS, Val(UNIT))
   nothing
 end
 
