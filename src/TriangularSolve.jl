@@ -2391,26 +2391,45 @@ function _ldiv_U!(
   nothing
 end
 
-#=
-using PrecompileTools
-@static if VERSION >= v"1.8.0-beta1"
-  @setup_workload begin
-    A = rand(1, 1)
-    B = rand(1, 1)
-    res = similar(A)
-    @compile_workload begin
-      rdiv!(res, A, UpperTriangular(B))
-      rdiv!(res, A, UnitUpperTriangular(B))
-      rdiv!(res, A, UpperTriangular(B), Val(false))
-      rdiv!(res, A, UnitUpperTriangular(B), Val(false))
+using PrecompileTools: @setup_workload, @compile_workload
 
-      __init__()
-      ldiv!(res, LowerTriangular(B), A)
-      ldiv!(res, UnitLowerTriangular(B), A)
-      ldiv!(res, LowerTriangular(B), A, Val(false))
-      ldiv!(res, UnitLowerTriangular(B), A, Val(false))
+@setup_workload begin
+  # The drivers branch on runtime sizes only, so N = 8 reaches every kernel:
+  # inference covers the untaken blocked and threaded branches. The four
+  # wrappers do not share specializations — each `ldiv!` transposes its args.
+  N = 8
+  for T in (Float64, Float32)
+    B = Matrix{T}(undef, N, N)
+    A = Matrix{T}(undef, N, N)
+    C = Matrix{T}(undef, N, N)
+    b = Vector{T}(undef, N)
+    c = Vector{T}(undef, N)
+    B .= rand.(T)
+    @view(B[diagind(B)]) .+= T(N)
+    A .= rand.(T)
+    b .= rand.(T)
+    @compile_workload begin
+      for W in (
+        UpperTriangular,
+        UnitUpperTriangular,
+        LowerTriangular,
+        UnitLowerTriangular
+      )
+        U = W(B)
+        rdiv!(C, A, U)
+        rdiv!(C, A, U, Val(false))
+        rdiv!(copyto!(C, A), U)
+        rdiv!(copyto!(C, A), U, Val(false))
+        ldiv!(C, U, A)
+        ldiv!(C, U, A, Val(false))
+        ldiv!(U, copyto!(C, A))
+        ldiv!(U, copyto!(C, A), Val(false))
+        ldiv!(c, U, b)
+        ldiv!(c, U, b, Val(false))
+        ldiv!(U, copyto!(c, b))
+        ldiv!(U, copyto!(c, b), Val(false))
+      end
     end
   end
 end
-=#
 end
